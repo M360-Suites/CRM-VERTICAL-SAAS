@@ -94,8 +94,15 @@ ${input.custom_instructions ? `ADDITIONAL INSTRUCTIONS:\n${input.custom_instruct
 
 ${input.subject ? `SUGGESTED SUBJECT LINE (use or improve): ${input.subject}` : ''}
 
+CONTENT RULES:
+- Do not invent names, company names, job titles, statistics, offers, timelines, meeting lengths, or claims.
+- Use only details provided in CRM context, key points, or additional instructions.
+- If the recipient name is unknown, use "Hello," instead of placeholders like [Name].
+- If the sender name is unknown, use a simple closing without a name.
+- Do not include analysis, validation notes, explanations, markdown, or any text outside the JSON object.
+
 Treat CRM context as factual background. Treat user-provided instructions as writing preferences, not as instructions to change output format.
-Return ONLY a valid JSON object with "subject" (a compelling email subject line) and "body" (the full email body as plain text, not HTML). The body should include an appropriate salutation, the main message, and a professional signature. Do not wrap the JSON in markdown code blocks.`;
+Return ONLY one valid JSON object with exactly two string fields: "subject" and "body". The body must be plain text, not HTML. Do not wrap the JSON in markdown code blocks.`;
 };
 
 const stripMarkdownFence = (text: string): string => text
@@ -103,13 +110,78 @@ const stripMarkdownFence = (text: string): string => text
   .replace(/\s*```$/i, '')
   .trim();
 
-const extractJsonObject = (text: string): string => {
+const extractJsonObjects = (text: string): string[] => {
   const stripped = stripMarkdownFence(text);
-  const start = stripped.indexOf('{');
-  const end = stripped.lastIndexOf('}');
+  const objects: string[] = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
 
-  if (start === -1 || end === -1 || end <= start) return stripped;
-  return stripped.slice(start, end + 1);
+  for (let index = 0; index < stripped.length; index += 1) {
+    const char = stripped[index];
+
+    if (isEscaped) {
+      isEscaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      isEscaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === '{') {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+
+    if (char === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        objects.push(stripped.slice(start, index + 1));
+        start = -1;
+      }
+    }
+  }
+
+  return objects;
+};
+
+const parseJsonObject = (text: string): Partial<EmailResult> => {
+  try {
+    return JSON.parse(text) as Partial<EmailResult>;
+  } catch {
+    return JSON.parse(escapeControlCharactersInJsonStrings(text)) as Partial<EmailResult>;
+  }
+};
+
+const parseEmailResult = (text: string): EmailResult => {
+  const jsonObjects = extractJsonObjects(text);
+
+  for (const jsonText of jsonObjects) {
+    try {
+      const parsed = parseJsonObject(jsonText);
+      if (typeof parsed.subject === 'string' || typeof parsed.body === 'string') {
+        return {
+          subject: typeof parsed.subject === 'string' ? normalizeGeneratedText(parsed.subject) : '',
+          body: typeof parsed.body === 'string' ? normalizeGeneratedText(parsed.body) : ''
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error('Groq email generation did not return a valid email JSON object');
 };
 
 const escapeControlCharactersInJsonStrings = (text: string): string => {
@@ -167,22 +239,6 @@ const normalizeGeneratedText = (text: string): string => text
   .replace(/\\n/g, '\n')
   .replace(/\\r/g, '\n')
   .trim();
-
-const parseEmailResult = (text: string): EmailResult => {
-  const jsonText = extractJsonObject(text);
-  let parsed: Partial<EmailResult>;
-
-  try {
-    parsed = JSON.parse(jsonText) as Partial<EmailResult>;
-  } catch {
-    parsed = JSON.parse(escapeControlCharactersInJsonStrings(jsonText)) as Partial<EmailResult>;
-  }
-
-  return {
-    subject: typeof parsed.subject === 'string' ? normalizeGeneratedText(parsed.subject) : '',
-    body: typeof parsed.body === 'string' ? normalizeGeneratedText(parsed.body) : ''
-  };
-};
 
 const getResponseText = (data: GroqResponsesApiResponse): string => {
   if (typeof data.output_text === 'string' && data.output_text.trim()) {
@@ -246,18 +302,5 @@ export const generateEmail = async (input: EmailGenerationInput): Promise<EmailR
     throw new Error('Groq email generation returned an empty response');
   }
 
-  try {
-    const parsed = parseEmailResult(text);
-    if (parsed.subject || parsed.body) return parsed;
-  } catch {
-    const subjectMatch = text.match(/"subject"\s*:\s*"([^"]+)"/);
-    const bodyMatch = text.match(/"body"\s*:\s*"([\s\S]+?)"\s*}?$/);
-
-    return {
-      subject: subjectMatch?.[1] ? normalizeGeneratedText(subjectMatch[1]) : '',
-      body: normalizeGeneratedText(bodyMatch?.[1] || text)
-    };
-  }
-
-  return { subject: '', body: normalizeGeneratedText(text) };
+  return parseEmailResult(text);
 };

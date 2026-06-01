@@ -13,7 +13,11 @@ import {
 import { Contact } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { Company } from '../models/Company';
+import { Activity } from '../models/Activity';
+import { User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
+import { decryptString } from '../utils/crypto';
+import { createRawEmail, getAuthedGmail } from '../utils/gmail';
 
 interface GenerateEmailBody {
   contact_id?: string;
@@ -30,6 +34,15 @@ interface GenerateEmailBody {
   subject?: string;
 }
 
+interface SendEmailBody {
+  contact_id?: string;
+  deal_id?: string;
+  to?: unknown;
+  subject?: string;
+  body?: string;
+  message?: string;
+}
+
 type EmailContext = {
   company_name?: string;
   company_industry?: string;
@@ -41,6 +54,9 @@ type EmailContext = {
 
 const MAX_KEY_POINTS = 10;
 const MAX_KEY_POINT_LENGTH = 220;
+const MAX_RECIPIENTS = 10;
+const MAX_SUBJECT_LENGTH = 180;
+const MAX_EMAIL_BODY_LENGTH = 10000;
 const EMAIL_WRITER_OPTIONS = ['friendly', 'professional', 'follow_up', 'cold_outreach', 'thank_you'] as const;
 
 type EmailWriterOption = typeof EMAIL_WRITER_OPTIONS[number];
@@ -52,6 +68,9 @@ const asTrimmedString = (value: unknown, maxLength: number): string | undefined 
   return trimmed.slice(0, maxLength);
 };
 
+const sanitizeHeaderValue = (value: string): string =>
+  value.replace(/[\r\n]+/g, ' ').trim();
+
 const isOneOf = <T extends readonly string[]>(value: string, values: T): value is T[number] =>
   (values as readonly string[]).includes(value);
 
@@ -59,6 +78,45 @@ const validateObjectId = (value: string | undefined, label: string): string | un
   if (!value) return undefined;
   if (!mongoose.Types.ObjectId.isValid(value)) return `${label} is invalid`;
   return undefined;
+};
+
+const isValidEmail = (value: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const normalizeRecipients = (value: unknown): { recipients?: Array<{ address: string; name: string }>; error?: string } => {
+  if (value === undefined) return {};
+
+  const items = Array.isArray(value) ? value : [value];
+  if (items.length === 0) return { error: 'to must include at least one recipient' };
+  if (items.length > MAX_RECIPIENTS) return { error: `to cannot contain more than ${MAX_RECIPIENTS} recipients` };
+
+  const recipients = items.map((item) => {
+    if (typeof item === 'string') {
+      const address = item.trim().toLowerCase();
+      return { address, name: '' };
+    }
+
+    if (typeof item === 'object' && item !== null) {
+      const recipient = item as { address?: unknown; email?: unknown; name?: unknown };
+      const address = asTrimmedString(recipient.address, 254) || asTrimmedString(recipient.email, 254);
+      return {
+        address: address?.toLowerCase() || '',
+        name: sanitizeHeaderValue(asTrimmedString(recipient.name, 120) || '')
+      };
+    }
+
+    return { address: '', name: '' };
+  });
+
+  if (recipients.some((recipient) => !isValidEmail(recipient.address))) {
+    return { error: 'to must contain valid email recipients' };
+  }
+
+  const deduped = Array.from(
+    new Map(recipients.map((recipient) => [recipient.address, recipient])).values()
+  );
+
+  return { recipients: deduped };
 };
 
 const normalizeWriterOption = (value: string): { tone: EmailTone; purpose: EmailPurpose } => {
@@ -88,6 +146,13 @@ const normalizeKeyPoints = (value: unknown): { keyPoints?: string[]; error?: str
 
   if (keyPoints.length !== value.length) return { error: 'key_points must only contain non-empty strings' };
   return { keyPoints };
+};
+
+const getGmailSendErrorMessage = (error: any): string => {
+  const status = error?.response?.status || error?.code;
+  if (status === 401) return 'Gmail access expired. Please reconnect Google.';
+  if (status === 403) return 'Gmail send permission missing. Please reconnect Google so the app can request send access.';
+  return 'Failed to send email';
 };
 
 export const generateEmailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -191,6 +256,155 @@ export const generateEmailHandler = async (req: AuthRequest, res: Response): Pro
     res.status(500).json({
       status: false,
       message: 'Failed to generate email'
+    });
+  }
+};
+
+export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = req.body as SendEmailBody;
+    const contactId = asTrimmedString(body.contact_id, 80);
+    const dealId = asTrimmedString(body.deal_id, 80);
+    const subject = asTrimmedString(body.subject, MAX_SUBJECT_LENGTH);
+    const message = asTrimmedString(body.body, MAX_EMAIL_BODY_LENGTH) || asTrimmedString(body.message, MAX_EMAIL_BODY_LENGTH);
+    const errors = [
+      validateObjectId(contactId, 'contact_id'),
+      validateObjectId(dealId, 'deal_id')
+    ].filter((error): error is string => Boolean(error));
+
+    if (!subject) errors.push('subject is required');
+    if (!message) errors.push('body is required');
+
+    const { recipients: explicitRecipients, error: recipientsError } = normalizeRecipients(body.to);
+    if (recipientsError) errors.push(recipientsError);
+
+    if (errors.length > 0) {
+      res.status(400).json({ status: false, message: 'Validation failed', errors });
+      return;
+    }
+
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    let contact: { _id: mongoose.Types.ObjectId; first_name: string; last_name: string; email?: string } | null = null;
+    if (contactId) {
+      contact = await Contact.findOne({ _id: contactId, organization_id: organizationId })
+        .select('first_name last_name email')
+        .lean();
+
+      if (!contact) {
+        res.status(404).json({ status: false, message: 'Contact not found' });
+        return;
+      }
+
+      if (!contact.email || !isValidEmail(contact.email)) {
+        res.status(400).json({ status: false, message: 'Selected contact does not have a valid email address' });
+        return;
+      }
+    }
+
+    if (dealId) {
+      const deal = await Deal.exists({ _id: dealId, organization_id: organizationId });
+      if (!deal) {
+        res.status(404).json({ status: false, message: 'Deal not found' });
+        return;
+      }
+    }
+
+    const contactRecipient = contact
+      ? [{
+          address: contact.email as string,
+          name: `${contact.first_name} ${contact.last_name}`.trim()
+        }]
+      : [];
+    const recipients = [...contactRecipient, ...(explicitRecipients || [])];
+    const dedupedRecipients = Array.from(
+      new Map(recipients.map((recipient) => [recipient.address.toLowerCase(), {
+        address: recipient.address.toLowerCase(),
+        name: recipient.name
+      }])).values()
+    );
+
+    if (dedupedRecipients.length === 0) {
+      res.status(400).json({ status: false, message: 'Provide contact_id or to recipients' });
+      return;
+    }
+
+    const user = await User.findOne({ _id: req.user?.id, organization_id: organizationId })
+      .select('email display_name google_access_token google_refresh_token')
+      .lean();
+
+    const accessToken = user?.google_access_token ? decryptString(user.google_access_token) || '' : '';
+    const refreshToken = user?.google_refresh_token ? decryptString(user.google_refresh_token) || '' : '';
+    if (!user || !accessToken) {
+      res.status(400).json({
+        status: false,
+        message: 'Gmail not connected. Please connect Google before sending email.'
+      });
+      return;
+    }
+
+    const gmail = getAuthedGmail(accessToken, refreshToken);
+    const sendResult = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: createRawEmail({
+          from: {
+            address: user.email,
+            name: user.display_name
+          },
+          to: dedupedRecipients,
+          subject: subject as string,
+          body: message as string
+        })
+      }
+    });
+
+    const sentAt = new Date();
+    if (contactId) {
+      await Contact.updateOne(
+        { _id: contactId, organization_id: organizationId },
+        { $set: { last_contacted_at: sentAt } }
+      );
+    }
+
+    await Activity.create({
+      type: 'email',
+      content: `Email sent: ${subject}`,
+      contact_id: contactId ? new mongoose.Types.ObjectId(contactId) : undefined,
+      deal_id: dealId ? new mongoose.Types.ObjectId(dealId) : undefined,
+      user_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
+      organization_id: organizationId,
+      metadata: {
+        subject,
+        recipients: dedupedRecipients.map((recipient) => recipient.address),
+        gmail_message_id: sendResult.data.id,
+        thread_id: sendResult.data.threadId,
+        sent_at: sentAt
+      }
+    });
+
+    res.json({
+      status: true,
+      message: 'Email sent successfully',
+      data: {
+        subject,
+        recipients: dedupedRecipients,
+        from: {
+          address: user.email,
+          name: user.display_name
+        },
+        gmail_message_id: sendResult.data.id,
+        thread_id: sendResult.data.threadId,
+        sent_at: sentAt
+      }
+    });
+  } catch (error: any) {
+    console.error('Email send error:', error);
+    const status = error?.response?.status || error?.code;
+    res.status(status === 401 ? 401 : status === 403 ? 403 : 500).json({
+      status: false,
+      message: getGmailSendErrorMessage(error)
     });
   }
 };

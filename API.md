@@ -734,6 +734,7 @@ All AI writer routes require authentication.
 | Method | Endpoint | Description | Access |
 |--------|----------|-------------|--------|
 | POST | /ai/email/generate | Generate a CRM-aware email draft | admin, sales_manager, sales_rep |
+| POST | /ai/email/send | Send a finalized email draft | admin, sales_manager, sales_rep |
 
 #### POST /ai/email/generate
 Generates an email subject and plain-text body. Optional `contact_id` and `deal_id` values are used only when they belong to the current user's organization.
@@ -773,6 +774,52 @@ Compatibility fields still accepted for older clients:
 **Errors:**
 - `400` for invalid enum values, invalid IDs, or malformed compatibility fields
 - `404` when a provided contact, company, or deal is not found in the organization
+
+---
+
+#### POST /ai/email/send
+Sends the final edited draft from the authenticated user's connected Google account. Provide either `contact_id`, `to`, or both. When `contact_id` is provided, the contact must belong to the current organization and have a valid email address. If `deal_id` is provided, an email activity is linked to that deal.
+
+Users must connect or reconnect Google through `/email/auth` so the app has Gmail send permission.
+
+**Request Body:**
+```json
+{
+  "contact_id": "string",
+  "deal_id": "string",
+  "to": ["person@example.com"],
+  "subject": "string",
+  "body": "string"
+}
+```
+
+`to` can be a string, an array of strings, or an array of `{ "address": "string", "name": "string" }` objects.
+
+**Response (200):**
+```json
+{
+  "status": true,
+  "message": "Email sent successfully",
+  "data": {
+    "subject": "string",
+    "from": { "address": "user@gmail.com", "name": "User Name" },
+    "recipients": [{ "address": "person@example.com", "name": "Person" }],
+    "gmail_message_id": "string",
+    "thread_id": "string",
+    "sent_at": "datetime"
+  }
+}
+```
+
+**Side effects:**
+- creates an `email` activity
+- updates `last_contacted_at` when sending to a selected contact
+
+**Errors:**
+- `400` for missing subject/body, invalid recipients, invalid IDs, or a contact without email
+- `400` when Google is not connected
+- `403` when the connected Google account needs to be reconnected for send permission
+- `404` when a provided contact or deal is not found in the organization
 
 ---
 

@@ -1,5 +1,5 @@
 import { Router, type Router as RouterType } from 'express';
-import { generateEmailHandler } from '../controllers/emailWriterController';
+import { generateEmailHandler, sendEmailHandler } from '../controllers/emailWriterController';
 import { authenticate, authorize } from '../middleware/auth';
 
 const router: RouterType = Router();
@@ -102,5 +102,64 @@ router.use(authenticate);
  *         description: Failed to generate email
  */
 router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'), generateEmailHandler);
+
+/**
+ * @swagger
+ * /ai/email/send:
+ *   post:
+ *     summary: Send a finalized AI email draft
+ *     description: Sends from the authenticated user's connected Google account. Existing Gmail connections may need to reconnect so the app can request Gmail send permission.
+ *     tags: [AI Email Writer]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [subject, body]
+ *             properties:
+ *               contact_id:
+ *                 type: string
+ *                 description: Optional CRM contact to send to
+ *               deal_id:
+ *                 type: string
+ *                 description: Optional deal to link the email activity to
+ *               to:
+ *                 oneOf:
+ *                   - type: string
+ *                   - type: array
+ *                     items:
+ *                       oneOf:
+ *                         - type: string
+ *                         - type: object
+ *                           properties:
+ *                             address:
+ *                               type: string
+ *                             email:
+ *                               type: string
+ *                             name:
+ *                               type: string
+ *                 description: Explicit recipient or recipients when no contact is selected
+ *               subject:
+ *                 type: string
+ *                 maxLength: 180
+ *               body:
+ *                 type: string
+ *                 maxLength: 10000
+ *                 description: Final edited plain-text email body
+ *     responses:
+ *       200:
+ *         description: Email sent successfully
+ *       400:
+ *         description: Validation failed
+ *       404:
+ *         description: Contact or deal not found
+ *       500:
+ *         description: Failed to send email
+ */
+router.post('/email/send', authorize('admin', 'sales_manager', 'sales_rep'), sendEmailHandler);
 
 export default router;

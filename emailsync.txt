@@ -29,7 +29,7 @@ Developer contact info: your email
 4. 
 Click Save and Continue
 5. 
-Scopes: Click Add or Remove Scopes, search for gmail.readonly, select https://www.googleapis.com/auth/gmail.readonly → Add → Update → Save and Continue
+Scopes: Click Add or Remove Scopes, add https://www.googleapis.com/auth/gmail.readonly and https://www.googleapis.com/auth/gmail.send → Add → Update → Save and Continue
 6. 
 Test users: Add your own email → Save and Continue
 7. 

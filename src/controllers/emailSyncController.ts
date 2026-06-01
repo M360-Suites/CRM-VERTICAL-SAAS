@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import { google } from 'googleapis';
 import { User } from '../models/User';
 import { EmailMessage } from '../models/EmailMessage';
 import { Contact } from '../models/Contact';
@@ -7,25 +6,7 @@ import { AuthRequest } from '../types';
 import config from '../config';
 import { requireOrganization } from '../utils/tenant';
 import { decryptString, encryptString } from '../utils/crypto';
-
-const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
-
-const getEmailOAuth2Client = () => {
-  return new google.auth.OAuth2(
-    config.GOOGLE_CLIENT_ID,
-    config.GOOGLE_CLIENT_SECRET,
-    config.GOOGLE_EMAIL_REDIRECT_URI
-  );
-};
-
-const getAuthedGmail = (accessToken: string, refreshToken: string) => {
-  const oauth2Client = getEmailOAuth2Client();
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  });
-  return google.gmail({ version: 'v1', auth: oauth2Client });
-};
+import { GMAIL_SCOPES, getAuthedGmail, getEmailOAuth2Client } from '../utils/gmail';
 
 const decodeBase64 = (data: string): string => {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');

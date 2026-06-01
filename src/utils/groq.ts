@@ -175,6 +175,8 @@ export const generateEmail = async (input: EmailGenerationInput): Promise<EmailR
     })
   });
 
+
+  
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Groq email generation failed with status ${response.status}: ${errorText}`);

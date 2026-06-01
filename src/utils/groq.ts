@@ -112,12 +112,18 @@ const extractJsonObject = (text: string): string => {
   return stripped.slice(start, end + 1);
 };
 
+const normalizeGeneratedText = (text: string): string => text
+  .replace(/\\r\\n/g, '\n')
+  .replace(/\\n/g, '\n')
+  .replace(/\\r/g, '\n')
+  .trim();
+
 const parseEmailResult = (text: string): EmailResult => {
   const parsed = JSON.parse(extractJsonObject(text)) as Partial<EmailResult>;
 
   return {
-    subject: typeof parsed.subject === 'string' ? parsed.subject.trim() : '',
-    body: typeof parsed.body === 'string' ? parsed.body.trim() : ''
+    subject: typeof parsed.subject === 'string' ? normalizeGeneratedText(parsed.subject) : '',
+    body: typeof parsed.body === 'string' ? normalizeGeneratedText(parsed.body) : ''
   };
 };
 
@@ -189,10 +195,10 @@ export const generateEmail = async (input: EmailGenerationInput): Promise<EmailR
     const bodyMatch = text.match(/"body"\s*:\s*"([\s\S]+?)"\s*}?$/);
 
     return {
-      subject: subjectMatch?.[1] || '',
-      body: bodyMatch?.[1] || text
+      subject: subjectMatch?.[1] ? normalizeGeneratedText(subjectMatch[1]) : '',
+      body: normalizeGeneratedText(bodyMatch?.[1] || text)
     };
   }
 
-  return { subject: '', body: text };
+  return { subject: '', body: normalizeGeneratedText(text) };
 };

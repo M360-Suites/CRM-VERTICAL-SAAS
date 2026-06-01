@@ -112,6 +112,56 @@ const extractJsonObject = (text: string): string => {
   return stripped.slice(start, end + 1);
 };
 
+const escapeControlCharactersInJsonStrings = (text: string): string => {
+  let escapedText = '';
+  let inString = false;
+  let isEscaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (isEscaped) {
+      escapedText += char;
+      isEscaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escapedText += char;
+      isEscaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      escapedText += char;
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      if (char === '\r') {
+        if (text[index + 1] === '\n') index += 1;
+        escapedText += '\\n';
+        continue;
+      }
+
+      if (char === '\n') {
+        escapedText += '\\n';
+        continue;
+      }
+
+      if (char === '\t') {
+        escapedText += '\\t';
+        continue;
+      }
+    }
+
+    escapedText += char;
+  }
+
+  return escapedText;
+};
+
 const normalizeGeneratedText = (text: string): string => text
   .replace(/\\r\\n/g, '\n')
   .replace(/\\n/g, '\n')
@@ -119,7 +169,14 @@ const normalizeGeneratedText = (text: string): string => text
   .trim();
 
 const parseEmailResult = (text: string): EmailResult => {
-  const parsed = JSON.parse(extractJsonObject(text)) as Partial<EmailResult>;
+  const jsonText = extractJsonObject(text);
+  let parsed: Partial<EmailResult>;
+
+  try {
+    parsed = JSON.parse(jsonText) as Partial<EmailResult>;
+  } catch {
+    parsed = JSON.parse(escapeControlCharactersInJsonStrings(jsonText)) as Partial<EmailResult>;
+  }
 
   return {
     subject: typeof parsed.subject === 'string' ? normalizeGeneratedText(parsed.subject) : '',

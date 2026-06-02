@@ -136,8 +136,8 @@ GET    /api/v1/contacts/:id/tasks
        - Response: { tasks: [...] }
 
 POST   /api/v1/contacts/bulk-import
-       - Bulk import contacts
-       - Body: { contacts: [...] }
+       - Bulk import contacts from CSV
+       - Body: multipart/form-data with file=<contacts.csv>
        - Response: { imported: count, errors: [...] }
 
 TEMPERATURES: hot, warm, cold

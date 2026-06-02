@@ -508,10 +508,73 @@ export const exportContacts = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-/** Request body for bulk import */
-interface BulkImportBody {
-  contacts: CreateContactBody[];
-}
+type CsvContactRow = Partial<Record<keyof CreateContactBody, string>>;
+
+const parseCsv = (csv: string): CsvContactRow[] => {
+  const rows: string[][] = [];
+  let current = '';
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < csv.length; i++) {
+    const char = csv[i];
+    const next = csv[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      row.push(current);
+      current = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i++;
+      row.push(current);
+      if (row.some((value) => value.trim() !== '')) rows.push(row);
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  row.push(current);
+  if (row.some((value) => value.trim() !== '')) rows.push(row);
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, '').trim().toLowerCase());
+  return rows.slice(1).map((values) =>
+    headers.reduce<CsvContactRow>((contact, header, index) => {
+      if (header) {
+        contact[header as keyof CreateContactBody] = values[index]?.trim() || '';
+      }
+      return contact;
+    }, {})
+  );
+};
+
+const parseTags = (tags?: string): string[] => {
+  if (!tags) return [];
+  return tags
+    .split(/[;,]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+};
+
+const parseTemperature = (temperature?: string): Temperature => {
+  return temperature === 'hot' || temperature === 'cold' || temperature === 'warm' ? temperature : 'warm';
+};
 
 /**
  * Bulk import contacts
@@ -519,14 +582,23 @@ interface BulkImportBody {
  */
 export const bulkImportContacts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { contacts } = req.body as BulkImportBody;
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    if (!Array.isArray(contacts) || contacts.length === 0) {
+    if (!req.file) {
       res.status(400).json({
         status: false,
-        message: 'Contacts array is required'
+        message: 'CSV file is required'
+      });
+      return;
+    }
+
+    const contacts = parseCsv(req.file.buffer.toString('utf8'));
+
+    if (contacts.length === 0) {
+      res.status(400).json({
+        status: false,
+        message: 'CSV file must include a header row and at least one contact row'
       });
       return;
     }
@@ -541,6 +613,11 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
         continue;
       }
 
+      if (contact.company_id && !mongoose.Types.ObjectId.isValid(contact.company_id)) {
+        errors.push(`Row ${i + 1}: company_id is invalid`);
+        continue;
+      }
+
       validContacts.push({
         first_name: contact.first_name,
         last_name: contact.last_name,
@@ -548,8 +625,8 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
         phone: contact.phone,
         role_title: contact.role_title,
         company_id: contact.company_id ? new mongoose.Types.ObjectId(contact.company_id) : undefined,
-        temperature: contact.temperature || 'warm',
-        tags: contact.tags || [],
+        temperature: parseTemperature(contact.temperature),
+        tags: parseTags(contact.tags),
         owner_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
         organization_id: organizationId
       });

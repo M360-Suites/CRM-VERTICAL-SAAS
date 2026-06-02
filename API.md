@@ -407,24 +407,18 @@ first_name, last_name, email, phone, role_title, company, industry, website, tem
 ---
 
 #### POST /contacts/bulk-import
-Import multiple contacts from a spreadsheet array.
+Import multiple contacts from a CSV file.
 
-**Request Body:**
-```json
-{
-  "contacts": [
-    {
-      "first_name": "string",
-      "last_name": "string",
-      "email": "string",
-      "phone": "string",
-      "role_title": "string",
-      "company_id": "string",
-      "temperature": "hot | warm | cold",
-      "tags": ["string"]
-    }
-  ]
-}
+**Request:** `multipart/form-data`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| file | CSV file | Yes | CSV containing `first_name` and `last_name` columns. |
+
+CSV columns:
+```csv
+first_name,last_name,email,phone,role_title,company_id,temperature,tags
+Jane,Smith,jane@example.com,+1234567890,VP Sales,64f...,hot,lead;enterprise
 ```
 
 --- 

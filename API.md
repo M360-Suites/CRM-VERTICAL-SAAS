@@ -431,6 +431,7 @@ All company routes require authentication.
 |--------|----------|-------------|--------|
 | GET | /companies | List companies | All roles |
 | GET | /companies/export | Export companies | admin, sales_manager |
+| POST | /companies/bulk-import | Bulk import companies | admin, sales_manager, sales_rep |
 | GET | /companies/:id | Get company | All roles |
 | POST | /companies | Create company | admin, sales_manager, sales_rep |
 | PATCH | /companies/:id | Update company | admin, sales_manager, sales_rep |
@@ -531,6 +532,23 @@ Query parameters:
 CSV columns:
 ```
 name, industry, website, email, phone, address, contact_person, notes, owner_email, owner_name, created_at
+```
+
+---
+
+#### POST /companies/bulk-import
+Import multiple companies from a CSV file.
+
+**Request:** `multipart/form-data`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| file | CSV file | Yes | CSV containing a `name` column. |
+
+CSV columns:
+```csv
+name,industry,website,email,phone,address,contact_person,notes
+Acme Inc,Manufacturing,https://acme.example,hello@acme.example,+1234567890,123 Main St,Jane Smith,Priority account
 ```
 
 ---

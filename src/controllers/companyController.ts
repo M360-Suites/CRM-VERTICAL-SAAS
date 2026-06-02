@@ -194,6 +194,62 @@ interface CreateCompanyBody {
   address?: string;
 }
 
+type CsvCompanyRow = Partial<Record<keyof CreateCompanyBody, string>>;
+
+const parseCsv = (csv: string): CsvCompanyRow[] => {
+  const rows: string[][] = [];
+  let current = '';
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < csv.length; i++) {
+    const char = csv[i];
+    const next = csv[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      row.push(current);
+      current = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i++;
+      row.push(current);
+      if (row.some((value) => value.trim() !== '')) rows.push(row);
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  row.push(current);
+  if (row.some((value) => value.trim() !== '')) rows.push(row);
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, '').trim().toLowerCase());
+  return rows.slice(1).map((values) =>
+    headers.reduce<CsvCompanyRow>((company, header, index) => {
+      if (header) {
+        company[header as keyof CreateCompanyBody] = values[index]?.trim() || '';
+      }
+      return company;
+    }, {})
+  );
+};
+
 export const createCompany = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, industry, website, notes, contact_person, email, phone, address } = req.body as CreateCompanyBody;
@@ -228,6 +284,72 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({
       status: false,
       message: 'Failed to create company'
+    });
+  }
+};
+
+export const bulkImportCompanies = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    if (!req.file) {
+      res.status(400).json({
+        status: false,
+        message: 'CSV file is required'
+      });
+      return;
+    }
+
+    const companies = parseCsv(req.file.buffer.toString('utf8'));
+
+    if (companies.length === 0) {
+      res.status(400).json({
+        status: false,
+        message: 'CSV file must include a header row and at least one company row'
+      });
+      return;
+    }
+
+    const errors: string[] = [];
+    const validCompanies: Record<string, unknown>[] = [];
+
+    for (let i = 0; i < companies.length; i++) {
+      const company = companies[i];
+      if (!company.name) {
+        errors.push(`Row ${i + 1}: name is required`);
+        continue;
+      }
+
+      validCompanies.push({
+        name: company.name,
+        industry: company.industry,
+        website: company.website,
+        notes: company.notes,
+        contact_person: company.contact_person,
+        email: company.email,
+        phone: company.phone,
+        address: company.address,
+        owner_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
+        organization_id: organizationId
+      });
+    }
+
+    let imported = 0;
+    if (validCompanies.length > 0) {
+      const result = await Company.insertMany(validCompanies);
+      imported = result.length;
+    }
+
+    res.json({
+      status: true,
+      message: 'Companies imported successfully',
+      data: { imported, errors: errors.length > 0 ? errors : undefined }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: 'Failed to import companies'
     });
   }
 };

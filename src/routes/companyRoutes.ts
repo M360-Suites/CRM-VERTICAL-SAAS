@@ -3,6 +3,8 @@
  * Handles CRUD operations for companies
  */
 import { Router, type Router as RouterType } from 'express';
+import type { Request } from 'express';
+import multer from 'multer';
 import {
   listCompanies,
   getCompanyById,
@@ -12,10 +14,30 @@ import {
   getCompanyContacts,
   getCompanyDeals,
   getCompanyStats,
-  exportCompanies
+  exportCompanies,
+  bulkImportCompanies
 } from '../controllers/companyController';
 import { authenticate, authorize } from '../middleware/auth';
 
+type MulterOptions = NonNullable<Parameters<typeof multer>[0]>;
+type FileFilterCallback = {
+  (error: Error): void;
+  (error: null, acceptFile: boolean): void;
+};
+
+const csvUploadOptions: MulterOptions = {
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const isCsv =
+      file.originalname.toLowerCase().endsWith('.csv') ||
+      ['text/csv', 'application/csv', 'application/vnd.ms-excel'].includes(file.mimetype);
+
+    cb(null, isCsv);
+  }
+};
+
+const uploadCsv = multer(csvUploadOptions);
 const router: RouterType = Router();
 
 router.use(authenticate);
@@ -81,6 +103,33 @@ router.get('/', listCompanies);
  *         description: File downloaded
  */
 router.get('/export', authorize('admin', 'sales_manager'), exportCompanies);
+
+/**
+ * @swagger
+ * /companies/bulk-import:
+ *   post:
+ *     summary: Bulk import companies
+ *     tags: [Companies]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV with a required name column. Optional columns include industry, website, email, phone, address, contact_person, and notes.
+ *     responses:
+ *       200:
+ *         description: Companies imported successfully
+ */
+router.post('/bulk-import', authorize('admin', 'sales_manager', 'sales_rep'), uploadCsv.single('file'), bulkImportCompanies);
 
 /**
  * @swagger

@@ -153,6 +153,16 @@ GET    /api/v1/companies
        - Each company includes stats:
          { contact_count, deal_count, pipeline_value, won_revenue }
 
+GET    /api/v1/companies/export
+       - Export companies as CSV or JSON
+       - Query: format=csv|json
+       - Response: CSV file or JSON export
+
+POST   /api/v1/companies/bulk-import
+       - Bulk import companies from CSV
+       - Body: multipart/form-data with file=<companies.csv>
+       - Response: { imported: count, errors: [...] }
+
 GET    /api/v1/companies/:id
        - Get company by ID
        - Response: Company object with stats:

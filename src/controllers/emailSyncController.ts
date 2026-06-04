@@ -132,7 +132,7 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     user.gmail_sync_enabled = true;
     await user.save();
 
-    res.redirect(`${getFrontendUrl()}?gmail=connected`);
+    res.redirect(`${getFrontendUrl()}/inbox/gmail-callback/`);
   } catch (error) {
     console.error('Gmail auth callback error:', error);
     const { statusCode, message } = getGmailOAuthCallbackMessage(error);

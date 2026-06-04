@@ -8,6 +8,16 @@ import { requireOrganization } from '../utils/tenant';
 import { decryptString, encryptString } from '../utils/crypto';
 import { GMAIL_SCOPES, getAuthedGmail, getEmailOAuth2Client } from '../utils/gmail';
 
+type GoogleOAuthError = {
+  message?: string;
+  response?: {
+    data?: {
+      error?: string;
+      error_description?: string;
+    };
+  };
+};
+
 const decodeBase64 = (data: string): string => {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
 };
@@ -25,10 +35,48 @@ const parseEmailAddress = (raw: string): { name: string; address: string } => {
   return { name: raw.split('@')[0], address: raw.toLowerCase() };
 };
 
+const isGmailOAuthConfigured = (): boolean =>
+  Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.GOOGLE_EMAIL_REDIRECT_URI);
+
+const getGmailOAuthCallbackMessage = (error: unknown): { statusCode: number; message: string } => {
+  const oauthError = error as GoogleOAuthError;
+  const googleError = oauthError.response?.data?.error;
+  const googleDescription = oauthError.response?.data?.error_description;
+  const rawMessage = `${googleError || ''} ${googleDescription || ''} ${oauthError.message || ''}`.toLowerCase();
+
+  if (rawMessage.includes('redirect_uri_mismatch')) {
+    return {
+      statusCode: 400,
+      message: 'Gmail callback URL mismatch. Set GOOGLE_EMAIL_REDIRECT_URI to the exact callback URL configured in Google Cloud.'
+    };
+  }
+
+  if (rawMessage.includes('invalid_grant')) {
+    return {
+      statusCode: 400,
+      message: 'Gmail authorization code is invalid, expired, already used, or was issued for a different callback URL. Start Gmail connect again.'
+    };
+  }
+
+  if (rawMessage.includes('invalid_client') || rawMessage.includes('unauthorized_client')) {
+    return {
+      statusCode: 503,
+      message: 'Gmail OAuth client is not configured correctly. Check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.'
+    };
+  }
+
+  return { statusCode: 500, message: 'Failed to complete Gmail auth' };
+};
+
 export const getGmailAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
+
+    if (!isGmailOAuthConfigured()) {
+      res.status(503).json({ status: false, message: 'Gmail OAuth not configured' });
+      return;
+    }
 
     const oauth2Client = getEmailOAuth2Client();
     const url = oauth2Client.generateAuthUrl({
@@ -50,6 +98,11 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
 
     if (!code || typeof code !== 'string') {
       res.status(400).json({ status: false, message: 'Missing authorization code' });
+      return;
+    }
+
+    if (!isGmailOAuthConfigured()) {
+      res.status(503).json({ status: false, message: 'Gmail OAuth not configured' });
       return;
     }
 
@@ -81,7 +134,8 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     res.redirect(`${config.ORIGIN || 'http://localhost:3000'}?gmail=connected`);
   } catch (error) {
     console.error('Gmail auth callback error:', error);
-    res.status(500).json({ status: false, message: 'Failed to complete Gmail auth' });
+    const { statusCode, message } = getGmailOAuthCallbackMessage(error);
+    res.status(statusCode).json({ status: false, message });
   }
 };
 

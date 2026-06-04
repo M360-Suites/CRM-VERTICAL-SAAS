@@ -7,6 +7,7 @@ import config from '../config';
 import { requireOrganization } from '../utils/tenant';
 import { decryptString, encryptString } from '../utils/crypto';
 import { GMAIL_SCOPES, getAuthedGmail, getEmailOAuth2Client } from '../utils/gmail';
+import { getFrontendUrl } from '../utils/frontend';
 
 type GoogleOAuthError = {
   message?: string;
@@ -131,7 +132,7 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     user.gmail_sync_enabled = true;
     await user.save();
 
-    res.redirect(`${config.ORIGIN || 'http://localhost:3000'}?gmail=connected`);
+    res.redirect(`${getFrontendUrl()}?gmail=connected`);
   } catch (error) {
     console.error('Gmail auth callback error:', error);
     const { statusCode, message } = getGmailOAuthCallbackMessage(error);

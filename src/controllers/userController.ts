@@ -10,6 +10,7 @@ import { UserInvitation } from '../models/UserInvitation';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { sendUserInvitationEmail } from '../utils/email';
+import { getFrontendUrl } from '../utils/frontend';
 
 /** Request body for creating user */
 interface CreateUserBody {
@@ -43,8 +44,7 @@ const normalizeEmail = (email?: string): string | null => {
 };
 
 const getInviteAcceptUrl = (token: string): string => {
-  const frontendOrigin = process.env.FRONTEND_INVITE_URL || process.env.ORIGIN || 'http://localhost:3000';
-  return `${frontendOrigin.replace(/\/$/, '')}/accept-invite?token=${encodeURIComponent(token)}`;
+  return `${getFrontendUrl(process.env.FRONTEND_INVITE_URL)}/accept-invite?token=${encodeURIComponent(token)}`;
 };
 
 /**

@@ -13,6 +13,7 @@ import { sendEmailVerificationOTP, sendOTPEmail } from '../utils/email';
 import { seedDefaultPipelineForOrganization } from '../seeds/pipelineSeed';
 import { requireOrganization } from '../utils/tenant';
 import { ensureUserOrganization, makeOrganizationSlug } from '../utils/organization';
+import { getFrontendUrl } from '../utils/frontend';
 
 const COOKIE_NAMES = {
   ACCESS_TOKEN: 'crm_AT',
@@ -643,7 +644,7 @@ export const googleCallback = async (req: AuthRequest, res: Response): Promise<v
 
     setAuthCookies(res, token, user);
 
-    const redirectUrl = `${config.ORIGIN || 'http://localhost:3000'}?auth=success`;
+    const redirectUrl = `${getFrontendUrl()}?auth=success`;
 
     res.redirect(redirectUrl);
   } catch (error) {

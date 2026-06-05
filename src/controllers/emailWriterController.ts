@@ -17,7 +17,7 @@ import { Activity } from '../models/Activity';
 import { User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
 import { decryptString } from '../utils/crypto';
-import { createRawEmail, getAuthedGmail } from '../utils/gmail';
+import { createRawEmail, getAuthedGmail, RawEmailAttachment } from '../utils/gmail';
 
 interface GenerateEmailBody {
   contact_id?: string;
@@ -57,6 +57,8 @@ const MAX_KEY_POINT_LENGTH = 220;
 const MAX_RECIPIENTS = 10;
 const MAX_SUBJECT_LENGTH = 180;
 const MAX_EMAIL_BODY_LENGTH = 10000;
+const MAX_ATTACHMENT_COUNT = 10;
+const MAX_ATTACHMENT_TOTAL_SIZE = 20 * 1024 * 1024;
 const EMAIL_WRITER_OPTIONS = ['friendly', 'professional', 'follow_up', 'cold_outreach', 'thank_you'] as const;
 
 type EmailWriterOption = typeof EMAIL_WRITER_OPTIONS[number];
@@ -85,6 +87,17 @@ const isValidEmail = (value: string): boolean =>
 
 const normalizeRecipients = (value: unknown): { recipients?: Array<{ address: string; name: string }>; error?: string } => {
   if (value === undefined) return {};
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+      try {
+        return normalizeRecipients(JSON.parse(trimmed));
+      } catch {
+        return { error: 'to must be a valid email recipient or JSON recipient list' };
+      }
+    }
+  }
 
   const items = Array.isArray(value) ? value : [value];
   if (items.length === 0) return { error: 'to must include at least one recipient' };
@@ -117,6 +130,38 @@ const normalizeRecipients = (value: unknown): { recipients?: Array<{ address: st
   );
 
   return { recipients: deduped };
+};
+
+const getUploadedEmailDocuments = (req: AuthRequest): Express.Multer.File[] => {
+  if (req.file) return [req.file];
+  if (Array.isArray(req.files)) return req.files;
+
+  const filesByField = req.files as Record<string, Express.Multer.File[]> | undefined;
+  if (!filesByField) return [];
+
+  return [
+    ...(filesByField.documents || []),
+    ...(filesByField.document || []),
+    ...(filesByField.attachments || [])
+  ];
+};
+
+const normalizeAttachments = (files: Express.Multer.File[]): { attachments?: RawEmailAttachment[]; error?: string } => {
+  if (files.length === 0) return {};
+  if (files.length > MAX_ATTACHMENT_COUNT) return { error: `documents cannot contain more than ${MAX_ATTACHMENT_COUNT} files` };
+
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  if (totalSize > MAX_ATTACHMENT_TOTAL_SIZE) {
+    return { error: 'documents cannot exceed 20MB total' };
+  }
+
+  return {
+    attachments: files.map((file) => ({
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      content: file.buffer
+    }))
+  };
 };
 
 const normalizeWriterOption = (value: string): { tone: EmailTone; purpose: EmailPurpose } => {
@@ -267,6 +312,7 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
     const dealId = asTrimmedString(body.deal_id, 80);
     const subject = asTrimmedString(body.subject, MAX_SUBJECT_LENGTH);
     const message = asTrimmedString(body.body, MAX_EMAIL_BODY_LENGTH) || asTrimmedString(body.message, MAX_EMAIL_BODY_LENGTH);
+    const { attachments, error: attachmentsError } = normalizeAttachments(getUploadedEmailDocuments(req));
     const errors = [
       validateObjectId(contactId, 'contact_id'),
       validateObjectId(dealId, 'deal_id')
@@ -274,6 +320,7 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
 
     if (!subject) errors.push('subject is required');
     if (!message) errors.push('body is required');
+    if (attachmentsError) errors.push(attachmentsError);
 
     const { recipients: explicitRecipients, error: recipientsError } = normalizeRecipients(body.to);
     if (recipientsError) errors.push(recipientsError);
@@ -355,7 +402,8 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
           },
           to: dedupedRecipients,
           subject: subject as string,
-          body: message as string
+          body: message as string,
+          attachments
         })
       }
     });
@@ -378,6 +426,11 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
       metadata: {
         subject,
         recipients: dedupedRecipients.map((recipient) => recipient.address),
+        attachments: (attachments || []).map((attachment) => ({
+          filename: attachment.filename,
+          mime_type: attachment.mimeType,
+          size: attachment.content.length
+        })),
         gmail_message_id: sendResult.data.id,
         thread_id: sendResult.data.threadId,
         sent_at: sentAt
@@ -390,6 +443,11 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
       data: {
         subject,
         recipients: dedupedRecipients,
+        attachments: (attachments || []).map((attachment) => ({
+          filename: attachment.filename,
+          mime_type: attachment.mimeType,
+          size: attachment.content.length
+        })),
         from: {
           address: user.email,
           name: user.display_name

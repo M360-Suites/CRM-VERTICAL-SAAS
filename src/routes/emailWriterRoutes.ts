@@ -1,4 +1,5 @@
-import { Router, type Router as RouterType } from 'express';
+import { Router, type Request, type Router as RouterType } from 'express';
+import multer from 'multer';
 import { generateEmailHandler, sendEmailHandler } from '../controllers/emailWriterController';
 import { authenticate, authorize } from '../middleware/auth';
 
@@ -6,7 +7,29 @@ const router: RouterType = Router();
 
 router.use(authenticate);
 
+type MulterOptions = NonNullable<Parameters<typeof multer>[0]>;
+type FileFilterCallback = (error: Error | null, acceptFile: boolean) => void;
+
+const documentMimeTypes = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv'
+]);
+
+const emailUploadOptions: MulterOptions = {
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    cb(null, documentMimeTypes.has(file.mimetype));
+  }
+};
+
+const uploadEmailDocuments = multer(emailUploadOptions);
+
 /**
+ * 
  * @swagger
  * /ai/email/generate:
  *   post:
@@ -150,6 +173,34 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *                 type: string
  *                 maxLength: 10000
  *                 description: Final edited plain-text email body
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [subject, body]
+ *             properties:
+ *               contact_id:
+ *                 type: string
+ *               deal_id:
+ *                 type: string
+ *               to:
+ *                 description: Recipient email, repeated field, or JSON string array
+ *                 oneOf:
+ *                   - type: string
+ *                   - type: array
+ *                     items:
+ *                       type: string
+ *               subject:
+ *                 type: string
+ *                 maxLength: 180
+ *               body:
+ *                 type: string
+ *                 maxLength: 10000
+ *               documents:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Optional PDF, DOC, DOCX, TXT, or CSV attachments. Maximum 10 files, 10MB each.
  *     responses:
  *       200:
  *         description: Email sent successfully
@@ -160,6 +211,15 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *       500:
  *         description: Failed to send email
  */
-router.post('/email/send', authorize('admin', 'sales_manager', 'sales_rep'), sendEmailHandler);
+router.post(
+  '/email/send',
+  authorize('admin', 'sales_manager', 'sales_rep'),
+  uploadEmailDocuments.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'documents', maxCount: 10 },
+    { name: 'attachments', maxCount: 10 }
+  ]),
+  sendEmailHandler
+);
 
 export default router;

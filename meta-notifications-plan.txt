@@ -1,0 +1,234 @@
+Meta Notifications Plan - Receive Only
+
+Goal
+Build the first version of Meta notifications for the CRM.
+The CRM should receive notifications from WhatsApp, Instagram, and Facebook, save them in the backend, and let the frontend display them.
+
+This first version is receive-only.
+It will not send replies yet.
+It will not automate messages yet.
+It will not handle WhatsApp templates yet.
+
+
+Important Concept
+We should not try to pull notifications directly from Meta Business Suite.
+
+The correct first setup is to use Meta webhooks.
+Meta will send events to our backend whenever something happens, such as a new WhatsApp message, Instagram DM, or Facebook Page message.
+
+Flow:
+1. A customer sends a message on WhatsApp, Instagram, or Facebook.
+2. Meta sends a webhook event to our backend.
+3. Our backend verifies and processes the event.
+4. Our backend saves the event as a CRM notification.
+5. The frontend fetches unread notifications and shows them to the user.
+
+
+What We Are Building First
+1. A Meta webhook verification endpoint.
+2. A Meta webhook receiver endpoint.
+3. A Notification model in MongoDB.
+4. A service that normalizes different Meta payloads into one CRM notification format.
+5. API endpoints for the frontend to list and mark notifications as read.
+
+
+What We Are Not Building Yet
+1. Sending WhatsApp messages.
+2. Sending Instagram replies.
+3. Sending Facebook Messenger replies.
+4. WhatsApp templates.
+5. Automated bot replies.
+6. AI replies.
+7. Message assignment to agents.
+8. Full inbox conversation threading.
+
+Those can be added after receiving notifications works.
+
+
+Meta Assets Needed
+The business needs these assets in Meta Business Suite / Meta Business Manager:
+
+1. Meta Business account or Business Portfolio.
+2. Facebook Page.
+3. Instagram Professional or Business account connected to the Facebook Page.
+4. WhatsApp Business Account.
+5. WhatsApp Business phone number.
+6. Meta Developer App connected to the business assets.
+
+
+Backend Environment Variables
+Add these to .env:
+
+META_VERIFY_TOKEN=your_random_webhook_verify_token
+META_APP_SECRET=your_meta_app_secret
+META_ACCESS_TOKEN=your_meta_access_token_if_needed_for_subscriptions
+
+Notes:
+- META_VERIFY_TOKEN is created by us. It is a random secret string used during webhook setup.
+- META_APP_SECRET comes from the Meta Developer App.
+- META_ACCESS_TOKEN may be needed when subscribing pages, Instagram accounts, or WhatsApp business accounts to webhook events.
+- Tokens and secrets must never be exposed to the frontend.
+
+
+Webhook Endpoints To Create
+Create these backend routes:
+
+GET /api/v1/meta/webhook
+Purpose:
+- Meta calls this endpoint when verifying the webhook URL.
+- The backend checks hub.verify_token against META_VERIFY_TOKEN.
+- If valid, return hub.challenge.
+- If invalid, return 403.
+
+POST /api/v1/meta/webhook
+Purpose:
+- Meta sends notification events to this endpoint.
+- The backend verifies the request signature if possible.
+- The backend detects which platform sent the event.
+- The backend normalizes the event.
+- The backend saves it as a notification.
+- The backend returns 200 quickly.
+
+
+Webhook Security
+The backend should:
+
+1. Verify the GET challenge token.
+2. Verify Meta request signatures for POST requests using META_APP_SECRET.
+3. Return 200 quickly after receiving a valid webhook.
+4. Process heavy work asynchronously later if needed.
+5. Store raw_payload for debugging.
+6. Never trust incoming payload fields blindly.
+
+
+Notification Model
+Create a MongoDB model similar to this:
+
+{
+  organization_id: ObjectId,
+  platform: 'whatsapp' | 'instagram' | 'facebook',
+  type: 'message',
+  sender_id: string,
+  sender_name: string,
+  recipient_id: string,
+  message: string,
+  external_message_id: string,
+  received_at: Date,
+  is_read: boolean,
+  raw_payload: object,
+  created_at: Date,
+  updated_at: Date
+}
+
+Required fields:
+- organization_id
+- platform
+- type
+- received_at
+- is_read
+- raw_payload
+
+Optional fields:
+- sender_id
+- sender_name
+- recipient_id
+- message
+- external_message_id
+
+
+Frontend API Endpoints To Create
+GET /api/v1/notifications
+Purpose:
+- List notifications for the current user's organization.
+
+Useful query params:
+- page
+- limit
+- platform
+- is_read
+
+PATCH /api/v1/notifications/:id/read
+Purpose:
+- Mark one notification as read.
+
+PATCH /api/v1/notifications/read-all
+Purpose:
+- Mark all notifications as read for the current organization.
+
+
+Platform Event Targets
+Start with inbound messages only.
+
+WhatsApp:
+- Receive incoming customer messages from WhatsApp Business Platform webhooks.
+- Store message body, sender phone number, WhatsApp message ID, and timestamp.
+
+Instagram:
+- Receive Instagram DM message events.
+- Store sender ID, Instagram message ID, message text, and timestamp.
+
+Facebook:
+- Receive Facebook Page Messenger message events.
+- Store sender ID, Page ID, Messenger message ID, message text, and timestamp.
+
+
+Recommended First Implementation Order
+1. Add Notification model.
+2. Add meta webhook route.
+3. Implement GET webhook verification.
+4. Implement POST webhook receiver.
+5. Add normalizer helpers for WhatsApp, Instagram, and Facebook payloads.
+6. Save normalized notifications.
+7. Add notification list endpoint.
+8. Add mark-as-read endpoint.
+9. Test with Meta webhook test events.
+10. Test with real messages from each platform.
+
+
+Testing Checklist
+1. Backend has a public HTTPS URL.
+2. Meta Developer App webhook URL points to:
+   https://your-backend-domain.com/api/v1/meta/webhook
+3. Meta webhook verification succeeds.
+4. WhatsApp test webhook reaches backend.
+5. Instagram test webhook reaches backend.
+6. Facebook test webhook reaches backend.
+7. Real WhatsApp message creates one notification.
+8. Real Instagram DM creates one notification.
+9. Real Facebook Page message creates one notification.
+10. Frontend can fetch notifications.
+11. User can mark notification as read.
+
+
+Local Development
+Meta cannot send webhooks to localhost directly.
+
+For local testing, use a public tunnel such as ngrok:
+
+ngrok http 3000
+
+Then use the HTTPS forwarding URL as the webhook callback URL in Meta.
+
+Example:
+https://abc123.ngrok-free.app/api/v1/meta/webhook
+
+
+Future Phase
+After receive-only notifications work, we can add:
+
+1. Reply from CRM.
+2. Full conversation inbox.
+3. Message assignment.
+4. Read/unread sync.
+5. WhatsApp templates.
+6. AI suggested replies.
+7. Automation rules.
+8. Real-time frontend updates using sockets.
+
+
+Simple Summary
+First, we receive notifications only.
+Meta sends webhook events to our backend.
+The backend saves those events as CRM notifications.
+The frontend displays them.
+Replies and automation come later.

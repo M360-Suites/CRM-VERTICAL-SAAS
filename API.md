@@ -790,7 +790,7 @@ Compatibility fields still accepted for older clients:
 ---
 
 #### POST /ai/email/send
-Sends the final edited draft from the authenticated user's connected Google account. Provide either `contact_id`, `to`, or both. When `contact_id` is provided, the contact must belong to the current organization and have a valid email address. If `deal_id` is provided, an email activity is linked to that deal.
+Sends the final edited draft from the authenticated user's connected Google account. Provide either `contact_id`, `to`, or both. When `contact_id` is provided, the contact must belong to the current organization and have a valid email address. If `deal_id` is provided, an email activity is linked to that deal. Optional document attachments can be uploaded with `multipart/form-data`.
 
 Users must connect or reconnect Google through `/email/auth` so the app has Gmail send permission.
 
@@ -806,6 +806,15 @@ Users must connect or reconnect Google through `/email/auth` so the app has Gmai
 ```
 
 `to` can be a string, an array of strings, or an array of `{ "address": "string", "name": "string" }` objects.
+For `multipart/form-data`, `to` can be a single email string, repeated fields, or a JSON string array.
+
+Optional document upload fields:
+- `documents`: multiple files
+- `document`: single file
+- `attachments`: multiple files
+
+Allowed document types: PDF, DOC, DOCX, TXT, CSV.
+Limits: maximum 10 files, 10MB per file, 20MB total.
 
 **Response (200):**
 ```json
@@ -816,6 +825,7 @@ Users must connect or reconnect Google through `/email/auth` so the app has Gmai
     "subject": "string",
     "from": { "address": "user@gmail.com", "name": "User Name" },
     "recipients": [{ "address": "person@example.com", "name": "Person" }],
+    "attachments": [{ "filename": "proposal.pdf", "mime_type": "application/pdf", "size": 12345 }],
     "gmail_message_id": "string",
     "thread_id": "string",
     "sent_at": "datetime"

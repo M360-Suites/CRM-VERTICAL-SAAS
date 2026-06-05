@@ -131,7 +131,7 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  * /ai/email/send:
  *   post:
  *     summary: Send a finalized AI email draft
- *     description: Sends from the authenticated user's connected Google account. Supports JSON requests without files and multipart/form-data requests with optional document attachments. Existing Gmail connections may need to reconnect so the app can request Gmail send permission.
+ *     description: Sends from the authenticated user's connected Google account. Supports JSON requests without files and multipart/form-data requests with optional attachments. Existing Gmail connections may need to reconnect so the app can request Gmail send permission.
  *     tags: [AI Email Writer]
  *     security:
  *       - cookieAuth: []
@@ -142,7 +142,7 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *         application/json:
  *           schema:
  *             type: object
- *             required: [subject, body]
+ *             required: [to, subject, body]
  *             properties:
  *               contact_id:
  *                 type: string
@@ -165,7 +165,7 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *                               type: string
  *                             name:
  *                               type: string
- *                 description: Explicit recipient or recipients when no contact is selected
+ *                 description: Required explicit recipient or recipients
  *               subject:
  *                 type: string
  *                 maxLength: 180
@@ -176,14 +176,14 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [subject, body]
+ *             required: [to, subject, body]
  *             properties:
  *               contact_id:
  *                 type: string
  *               deal_id:
  *                 type: string
  *               to:
- *                 description: Recipient email, repeated field, or JSON string array. Provide either contact_id, to, or both.
+ *                 description: Required recipient email, repeated field, or JSON string array.
  *                 oneOf:
  *                   - type: string
  *                   - type: array
@@ -196,27 +196,13 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *                 type: string
  *                 maxLength: 10000
  *                 description: Final edited plain-text email body
- *               document:
- *                 type: string
- *                 format: binary
- *                 description: Optional single PDF, DOC, DOCX, TXT, or CSV attachment. Maximum 10MB.
- *               documents:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: binary
- *                 description: Optional PDF, DOC, DOCX, TXT, or CSV attachments. Maximum 10 files, 10MB each.
  *               attachments:
  *                 type: array
  *                 items:
  *                   type: string
  *                   format: binary
- *                 description: Alias for documents. Maximum 10 files, 10MB each.
+ *                 description: Optional PDF, DOC, DOCX, TXT, or CSV attachments. Maximum 10 files, 10MB each, 20MB total.
  *           encoding:
- *             document:
- *               contentType: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain, text/csv
- *             documents:
- *               contentType: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain, text/csv
  *             attachments:
  *               contentType: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain, text/csv
  *     responses:
@@ -285,8 +271,6 @@ router.post(
   '/email/send',
   authorize('admin', 'sales_manager', 'sales_rep'),
   uploadEmailDocuments.fields([
-    { name: 'document', maxCount: 1 },
-    { name: 'documents', maxCount: 10 },
     { name: 'attachments', maxCount: 10 }
   ]),
   sendEmailHandler

@@ -139,20 +139,16 @@ const getUploadedEmailDocuments = (req: AuthRequest): Express.Multer.File[] => {
   const filesByField = req.files as Record<string, Express.Multer.File[]> | undefined;
   if (!filesByField) return [];
 
-  return [
-    ...(filesByField.documents || []),
-    ...(filesByField.document || []),
-    ...(filesByField.attachments || [])
-  ];
+  return filesByField.attachments || [];
 };
 
 const normalizeAttachments = (files: Express.Multer.File[]): { attachments?: RawEmailAttachment[]; error?: string } => {
   if (files.length === 0) return {};
-  if (files.length > MAX_ATTACHMENT_COUNT) return { error: `documents cannot contain more than ${MAX_ATTACHMENT_COUNT} files` };
+  if (files.length > MAX_ATTACHMENT_COUNT) return { error: `attachments cannot contain more than ${MAX_ATTACHMENT_COUNT} files` };
 
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
   if (totalSize > MAX_ATTACHMENT_TOTAL_SIZE) {
-    return { error: 'documents cannot exceed 20MB total' };
+    return { error: 'attachments cannot exceed 20MB total' };
   }
 
   return {
@@ -229,7 +225,6 @@ export const generateEmailHandler = async (req: AuthRequest, res: Response): Pro
       res.status(400).json({ status: false, message: 'Validation failed', errors });
       return;
     }
-
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
@@ -313,6 +308,7 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
     const subject = asTrimmedString(body.subject, MAX_SUBJECT_LENGTH);
     const message = asTrimmedString(body.body, MAX_EMAIL_BODY_LENGTH) || asTrimmedString(body.message, MAX_EMAIL_BODY_LENGTH);
     const { attachments, error: attachmentsError } = normalizeAttachments(getUploadedEmailDocuments(req));
+    const { recipients: explicitRecipients, error: recipientsError } = normalizeRecipients(body.to);
     const errors = [
       validateObjectId(contactId, 'contact_id'),
       validateObjectId(dealId, 'deal_id')
@@ -320,15 +316,15 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
 
     if (!subject) errors.push('subject is required');
     if (!message) errors.push('body is required');
+    if (!explicitRecipients || explicitRecipients.length === 0) errors.push('to is required');
     if (attachmentsError) errors.push(attachmentsError);
-
-    const { recipients: explicitRecipients, error: recipientsError } = normalizeRecipients(body.to);
     if (recipientsError) errors.push(recipientsError);
 
     if (errors.length > 0) {
       res.status(400).json({ status: false, message: 'Validation failed', errors });
       return;
     }
+    const requiredRecipients = explicitRecipients as Array<{ address: string; name: string }>;
 
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
@@ -364,7 +360,7 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
           name: `${contact.first_name} ${contact.last_name}`.trim()
         }]
       : [];
-    const recipients = [...contactRecipient, ...(explicitRecipients || [])];
+    const recipients = [...contactRecipient, ...requiredRecipients];
     const dedupedRecipients = Array.from(
       new Map(recipients.map((recipient) => [recipient.address.toLowerCase(), {
         address: recipient.address.toLowerCase(),

@@ -790,7 +790,7 @@ Compatibility fields still accepted for older clients:
 ---
 
 #### POST /ai/email/send
-Sends the final edited draft from the authenticated user's connected Google account. Provide either `contact_id`, `to`, or both. When `contact_id` is provided, the contact must belong to the current organization and have a valid email address. If `deal_id` is provided, an email activity is linked to that deal. Optional document attachments can be uploaded with `multipart/form-data`.
+Sends the final edited draft from the authenticated user's connected Google account. `to` is required. When `contact_id` is provided, the contact must belong to the current organization and have a valid email address. If `deal_id` is provided, an email activity is linked to that deal. Optional attachments can be uploaded with `multipart/form-data`.
 
 Users must connect or reconnect Google through `/email/auth` so the app has Gmail send permission.
 
@@ -808,12 +808,10 @@ Users must connect or reconnect Google through `/email/auth` so the app has Gmai
 `to` can be a string, an array of strings, or an array of `{ "address": "string", "name": "string" }` objects.
 For `multipart/form-data`, `to` can be a single email string, repeated fields, or a JSON string array.
 
-Optional document upload fields:
-- `documents`: multiple files
-- `document`: single file
+Optional upload field:
 - `attachments`: multiple files
 
-Allowed document types: PDF, DOC, DOCX, TXT, CSV.
+Allowed attachment types: PDF, DOC, DOCX, TXT, CSV.
 Limits: maximum 10 files, 10MB per file, 20MB total.
 
 **Response (200):**
@@ -838,7 +836,7 @@ Limits: maximum 10 files, 10MB per file, 20MB total.
 - updates `last_contacted_at` when sending to a selected contact
 
 **Errors:**
-- `400` for missing subject/body, invalid recipients, invalid IDs, or a contact without email
+- `400` for missing to/subject/body, invalid recipients, invalid IDs, invalid attachments, or a contact without email
 - `400` when Google is not connected
 - `403` when the connected Google account needs to be reconnected for send permission
 - `404` when a provided contact or deal is not found in the organization

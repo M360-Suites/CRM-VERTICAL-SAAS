@@ -510,6 +510,10 @@ export const exportContacts = async (req: AuthRequest, res: Response): Promise<v
 
 type CsvContactRow = Partial<Record<keyof CreateContactBody, string>>;
 
+const CONTACT_CSV_HEADER_ALIASES: Record<string, keyof CreateContactBody> = {
+  role: 'role'
+};
+
 const parseCsv = (csv: string): CsvContactRow[] => {
   const rows: string[][] = [];
   let current = '';
@@ -557,7 +561,8 @@ const parseCsv = (csv: string): CsvContactRow[] => {
   return rows.slice(1).map((values) =>
     headers.reduce<CsvContactRow>((contact, header, index) => {
       if (header) {
-        contact[header as keyof CreateContactBody] = values[index]?.trim() || '';
+        const field = CONTACT_CSV_HEADER_ALIASES[header] || (header as keyof CreateContactBody);
+        contact[field] = values[index]?.trim() || '';
       }
       return contact;
     }, {})

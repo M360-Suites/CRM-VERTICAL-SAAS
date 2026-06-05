@@ -131,7 +131,7 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  * /ai/email/send:
  *   post:
  *     summary: Send a finalized AI email draft
- *     description: Sends from the authenticated user's connected Google account. Existing Gmail connections may need to reconnect so the app can request Gmail send permission.
+ *     description: Sends from the authenticated user's connected Google account. Supports JSON requests without files and multipart/form-data requests with optional document attachments. Existing Gmail connections may need to reconnect so the app can request Gmail send permission.
  *     tags: [AI Email Writer]
  *     security:
  *       - cookieAuth: []
@@ -183,7 +183,7 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *               deal_id:
  *                 type: string
  *               to:
- *                 description: Recipient email, repeated field, or JSON string array
+ *                 description: Recipient email, repeated field, or JSON string array. Provide either contact_id, to, or both.
  *                 oneOf:
  *                   - type: string
  *                   - type: array
@@ -195,17 +195,87 @@ router.post('/email/generate', authorize('admin', 'sales_manager', 'sales_rep'),
  *               body:
  *                 type: string
  *                 maxLength: 10000
+ *                 description: Final edited plain-text email body
+ *               document:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional single PDF, DOC, DOCX, TXT, or CSV attachment. Maximum 10MB.
  *               documents:
  *                 type: array
  *                 items:
  *                   type: string
  *                   format: binary
  *                 description: Optional PDF, DOC, DOCX, TXT, or CSV attachments. Maximum 10 files, 10MB each.
+ *               attachments:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Alias for documents. Maximum 10 files, 10MB each.
+ *           encoding:
+ *             document:
+ *               contentType: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain, text/csv
+ *             documents:
+ *               contentType: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain, text/csv
+ *             attachments:
+ *               contentType: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain, text/csv
  *     responses:
  *       200:
  *         description: Email sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     subject:
+ *                       type: string
+ *                     recipients:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           address:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                     attachments:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           filename:
+ *                             type: string
+ *                           mime_type:
+ *                             type: string
+ *                           size:
+ *                             type: number
+ *                     from:
+ *                       type: object
+ *                       properties:
+ *                         address:
+ *                           type: string
+ *                         name:
+ *                           type: string
+ *                     gmail_message_id:
+ *                       type: string
+ *                     thread_id:
+ *                       type: string
+ *                     sent_at:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: Unauthorized or Gmail access expired
+ *       403:
+ *         description: Gmail send permission missing
  *       400:
- *         description: Validation failed
+ *         description: Validation failed, invalid recipients, invalid attachments, or Gmail not connected
  *       404:
  *         description: Contact or deal not found
  *       500:

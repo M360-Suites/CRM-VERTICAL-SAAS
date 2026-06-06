@@ -87,6 +87,10 @@ router.use(authenticate);
  *     responses:
  *       200:
  *         description: Contacts retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ContactPaginatedResponse'
  */
 router.get('/', listContacts);
 

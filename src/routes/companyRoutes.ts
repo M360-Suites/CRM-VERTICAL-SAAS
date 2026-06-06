@@ -78,6 +78,10 @@ router.use(authenticate);
  *     responses:
  *       200:
  *         description: Companies retrieved successfully. Each company includes stats with contact_count, deal_count, pipeline_value, and won_revenue.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CompanyPaginatedResponse'
  */
 router.get('/', listCompanies);
 

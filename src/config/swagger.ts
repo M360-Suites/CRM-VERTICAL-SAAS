@@ -212,6 +212,36 @@ const options: swaggerJsdoc.Options = {
             contact_id: { type: 'string', nullable: true },
           },
         },
+        EmailMessagePaginatedResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/EmailMessage' },
+                },
+                total: { type: 'integer' },
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total_pages: { type: 'integer' },
+                stats: {
+                  type: 'object',
+                  properties: {
+                    synced_count: { type: 'integer' },
+                    link_ratio: { type: 'integer' },
+                    linked_senders: { type: 'integer' },
+                    total_senders: { type: 'integer' },
+                    linked_messages: { type: 'integer' },
+                  },
+                },
+              },
+            },
+          },
+        },
         Contact: {
           type: 'object',
           properties: {
@@ -231,6 +261,26 @@ const options: swaggerJsdoc.Options = {
             updated_at: { type: 'string', format: 'date-time' },
           },
         },
+        ContactPaginatedResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Contact' },
+                },
+                total: { type: 'integer' },
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total_pages: { type: 'integer' },
+              },
+            },
+          },
+        },
         Company: {
           type: 'object',
           properties: {
@@ -247,6 +297,26 @@ const options: swaggerJsdoc.Options = {
             address: { type: 'string', nullable: true },
             created_at: { type: 'string', format: 'date-time' },
             updated_at: { type: 'string', format: 'date-time' },
+          },
+        },
+        CompanyPaginatedResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Company' },
+                },
+                total: { type: 'integer' },
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total_pages: { type: 'integer' },
+              },
+            },
           },
         },
         PipelineDeal: {
@@ -357,6 +427,46 @@ const options: swaggerJsdoc.Options = {
             data: {
               type: 'array',
               items: { $ref: '#/components/schemas/Task' },
+            },
+          },
+        },
+        TaskPaginatedResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Task' },
+                },
+                total: { type: 'integer' },
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total_pages: { type: 'integer' },
+              },
+            },
+          },
+        },
+        UserPaginatedResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/User' },
+                },
+                total: { type: 'integer' },
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total_pages: { type: 'integer' },
+              },
             },
           },
         },

@@ -158,6 +158,10 @@ router.delete('/invitations/:id', authenticate, authorize('admin'), revokeInvita
  *     responses:
  *       200:
  *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UserPaginatedResponse'
  *       403:
  *         description: Admin access required
  */

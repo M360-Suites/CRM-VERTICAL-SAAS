@@ -161,35 +161,7 @@ router.post('/sync', authenticate, syncGmailInbox);
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/EmailMessage'
- *                 total:
- *                   type: integer
- *                 page:
- *                   type: integer
- *                 limit:
- *                   type: integer
- *                 total_pages:
- *                   type: integer
- *                 stats:
- *                   type: object
- *                   properties:
- *                     synced_count:
- *                       type: integer
- *                     link_ratio:
- *                       type: integer
- *                     linked_senders:
- *                       type: integer
- *                     total_senders:
- *                       type: integer
- *                     linked_messages:
- *                       type: integer
+ *               $ref: '#/components/schemas/EmailMessagePaginatedResponse'
  */
 router.get('/messages', authenticate, listSyncedMessages);
 

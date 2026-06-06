@@ -80,18 +80,7 @@ router.use(authenticate);
  *         content:
  *           application/json:
  *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/TaskListResponse'
- *                 - type: object
- *                   properties:
- *                     total:
- *                       type: number
- *                     page:
- *                       type: number
- *                     limit:
- *                       type: number
- *                     total_pages:
- *                       type: number
+ *               $ref: '#/components/schemas/TaskPaginatedResponse'
  */
 router.get('/', listTasks);
 

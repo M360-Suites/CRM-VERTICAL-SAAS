@@ -288,17 +288,19 @@ export const listSyncedMessages = async (req: AuthRequest, res: Response): Promi
 
     res.json({
       status: true,
-      data: messages,
-      total,
-      page,
-      limit,
-      total_pages: Math.ceil(total / limit),
-      stats: {
-        synced_count: total,
-        link_ratio: totalSenders.length > 0 ? Math.round((linkedSenders.length / totalSenders.length) * 100) : 0,
-        linked_senders: linkedSenders.length,
-        total_senders: totalSenders.length,
-        linked_messages: withContact,
+      data: {
+        data: messages,
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit),
+        stats: {
+          synced_count: total,
+          link_ratio: totalSenders.length > 0 ? Math.round((linkedSenders.length / totalSenders.length) * 100) : 0,
+          linked_senders: linkedSenders.length,
+          total_senders: totalSenders.length,
+          linked_messages: withContact,
+        },
       },
     });
   } catch (error) {

@@ -82,11 +82,13 @@ export const listUsers = async (req: AuthRequest, res: Response): Promise<void> 
     const response: PaginatedResponse<IUser> = {
       status: true,
       message: 'Users retrieved successfully',
-      data: users,
-      total,
-      page: Number(page),
-      limit: Number(limit),
-      total_pages: Math.ceil(total / Number(limit))
+      data: {
+        data: users,
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        total_pages: Math.ceil(total / Number(limit))
+      }
     };
 
     res.json(response);

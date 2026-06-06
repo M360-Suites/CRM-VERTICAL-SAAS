@@ -36,11 +36,13 @@ export interface AuthRequest extends Request {
 export interface PaginatedResponse<T> {
   status: boolean;
   message: string;
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-  total_pages: number;
+  data: {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  };
 }
 
 /**

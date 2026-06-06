@@ -129,11 +129,13 @@ export const listCompanies = async (req: AuthRequest, res: Response): Promise<vo
     const response: PaginatedResponse<ICompany> = {
       status: true,
       message: 'Companies retrieved successfully',
-      data: companiesWithStats as unknown as ICompany[],
-      total,
-      page,
-      limit,
-      total_pages: Math.ceil(total / limit)
+      data: {
+        data: companiesWithStats as unknown as ICompany[],
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit)
+      }
     };
 
     res.json(response);

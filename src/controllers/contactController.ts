@@ -73,11 +73,13 @@ export const listContacts = async (req: AuthRequest, res: Response): Promise<voi
     const response: PaginatedResponse<IContact> = {
       status: true,
       message: 'Contacts retrieved successfully',
-      data: contacts,
-      total,
-      page,
-      limit,
-      total_pages: Math.ceil(total / limit)
+      data: {
+        data: contacts,
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit)
+      }
     };
 
     res.json(response);

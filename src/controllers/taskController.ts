@@ -75,11 +75,13 @@ export const listTasks = async (req: AuthRequest, res: Response): Promise<void> 
     const response: PaginatedResponse<ITask> = {
       status: true,
       message: 'Tasks retrieved successfully',
-      data: tasks,
-      total,
-      page,
-      limit,
-      total_pages: Math.ceil(total / limit)
+      data: {
+        data: tasks,
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit)
+      }
     };
 
     res.json(response);

@@ -77,11 +77,13 @@ export const listDeals = async (req: AuthRequest, res: Response): Promise<void> 
     const response: PaginatedResponse<IDeal> = {
       status: true,
       message: 'Deals retrieved successfully',
-      data: deals,
-      total,
-      page,
-      limit,
-      total_pages: Math.ceil(total / limit)
+      data: {
+        data: deals,
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit)
+      }
     };
 
     res.json(response);

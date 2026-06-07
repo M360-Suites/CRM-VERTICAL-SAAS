@@ -45,6 +45,13 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
 /**
  * Generic API response structure
  * Standard response format for all endpoints
@@ -53,5 +60,6 @@ export interface ApiResponse<T = unknown> {
   status: boolean;
   message: string;
   data?: T;
+  pagination?: PaginationMeta;
   errors?: string[];
 }

@@ -2,7 +2,7 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import { Task, ITask, TaskType, TaskPriority, TaskStatus } from '../models/Task';
 import { Activity } from '../models/Activity';
-import { AuthRequest, PaginatedResponse } from '../types';
+import { ApiResponse, AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
 
 interface TaskQuery {
@@ -22,8 +22,8 @@ interface TaskQuery {
 export const listTasks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
-      page = 1,
-      limit = 20,
+      page: rawPage = 1,
+      limit: rawLimit = 20,
       search,
       status,
       priority,
@@ -34,6 +34,8 @@ export const listTasks = async (req: AuthRequest, res: Response): Promise<void> 
       deal_id,
       company_id
     } = req.query as TaskQuery;
+    const page = Number(rawPage);
+    const limit = Number(rawLimit);
 
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
@@ -72,11 +74,11 @@ export const listTasks = async (req: AuthRequest, res: Response): Promise<void> 
       Task.countDocuments(query)
     ]);
 
-    const response: PaginatedResponse<ITask> = {
+    const response: ApiResponse<ITask[]> = {
       status: true,
       message: 'Tasks retrieved successfully',
-      data: {
-        data: tasks,
+      data: tasks,
+      pagination: {
         total,
         page,
         limit,

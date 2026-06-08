@@ -44,39 +44,7 @@ router.use(authenticate);
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 stages:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       name:
- *                         type: string
- *                       total_deals:
- *                         type: number
- *                       total_value:
- *                         type: number
- *                       position:
- *                         type: number
- *                       is_won:
- *                         type: boolean
- *                       is_lost:
- *                         type: boolean
- *                       assignedTo:
- *                         allOf:
- *                           - $ref: '#/components/schemas/PipelineTeamMember'
- *                         nullable: true
- *                       deals:
- *                         type: array
- *                         items:
- *                           $ref: '#/components/schemas/PipelineDeal'
- *                 team_members:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/PipelineTeamMember'
+ *               $ref: '#/components/schemas/PipelinePageResponse'
  */
 router.get('/', getPipeline);
 

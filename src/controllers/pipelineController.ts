@@ -4,7 +4,7 @@ import { Activity } from '../models/Activity';
 import { Deal } from '../models/Deal';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { User } from '../models/User';
-import { AuthRequest } from '../types';
+import { ApiResponse, AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
 
 const isValidObjectId = (value: unknown): value is string =>
@@ -113,7 +113,7 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
 
     const stages = await getOrderedStages(organizationId);
     if (!stages) {
-      res.status(404).json({ message: 'No pipeline found' });
+      res.status(404).json({ status: false, message: 'No pipeline found' });
       return;
     }
 
@@ -135,29 +135,38 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
       formattedTeamMembers.map((member) => [member.id?.toString(), member])
     );
 
-    res.json({
-      stages: stages.map((stage) => {
-        const stageDeals = formattedDeals.filter((deal) => deal.stage_id?.toString() === stage._id.toString());
-        const assignedTo = stage.assignees?.[0]
-          ? teamMemberById.get(stage.assignees[0].toString()) || null
-          : null;
+    const response: ApiResponse<{
+      stages: Array<Record<string, unknown>>;
+      team_members: ReturnType<typeof formatTeamMember>[];
+    }> = {
+      status: true,
+      message: 'Pipeline retrieved successfully',
+      data: {
+        stages: stages.map((stage) => {
+          const stageDeals = formattedDeals.filter((deal) => deal.stage_id?.toString() === stage._id.toString());
+          const assignedTo = stage.assignees?.[0]
+            ? teamMemberById.get(stage.assignees[0].toString()) || null
+            : null;
 
-        return {
-          id: stage._id,
-          name: stage.name,
-          total_deals: stageDeals.length,
-          total_value: stageDeals.reduce((total, deal) => total + (Number(deal.value) || 0), 0),
-          position: stage.order,
-          is_won: stage.is_won,
-          is_lost: stage.is_lost,
-          assignedTo,
-          deals: stageDeals
-        };
-      }),
-      team_members: formattedTeamMembers
-    });
+          return {
+            id: stage._id,
+            name: stage.name,
+            total_deals: stageDeals.length,
+            total_value: stageDeals.reduce((total, deal) => total + (Number(deal.value) || 0), 0),
+            position: stage.order,
+            is_won: stage.is_won,
+            is_lost: stage.is_lost,
+            assignedTo,
+            deals: stageDeals
+          };
+        }),
+        team_members: formattedTeamMembers
+      }
+    };
+
+    res.json(response);
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch pipeline' });
+    res.status(500).json({ status: false, message: 'Failed to fetch pipeline' });
   }
 };
 

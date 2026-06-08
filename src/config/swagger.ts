@@ -371,24 +371,46 @@ const options: swaggerJsdoc.Options = {
             user_id: { type: 'string' },
           },
         },
-        PipelinePage: {
+        PipelinePageStage: {
           type: 'object',
           properties: {
-            stages: {
-              type: 'array',
-              items: { $ref: '#/components/schemas/PipelineStage' },
+            id: { type: 'string' },
+            name: { type: 'string' },
+            total_deals: { type: 'number' },
+            total_value: { type: 'number' },
+            position: { type: 'number' },
+            is_won: { type: 'boolean' },
+            is_lost: { type: 'boolean' },
+            assignedTo: {
+              allOf: [{ $ref: '#/components/schemas/PipelineTeamMember' }],
+              nullable: true,
             },
             deals: {
               type: 'array',
               items: { $ref: '#/components/schemas/PipelineDeal' },
             },
+          },
+        },
+        PipelinePage: {
+          type: 'object',
+          properties: {
+            stages: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/PipelinePageStage' },
+            },
             team_members: {
               type: 'array',
               items: { $ref: '#/components/schemas/PipelineTeamMember' },
             },
-            stage_assignees: {
-              type: 'array',
-              items: { $ref: '#/components/schemas/StageAssignee' },
+          },
+        },
+        PipelinePageResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Pipeline retrieved successfully' },
+            data: {
+              $ref: '#/components/schemas/PipelinePage',
             },
           },
         },

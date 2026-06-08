@@ -631,24 +631,28 @@ All pipeline routes require authentication and are available under `/pipeline`.
 **Response:**
 ```json
 {
-  "stages": [
-    {
-      "id": "stage_id",
-      "name": "Qualified",
-      "total_deals": 0,
-      "total_value": 0,
-      "position": 2,
-      "is_won": false,
-      "is_lost": false,
-      "assignedTo": {
-        "id": "user_id",
-        "email": "sales@example.com",
-        "name": "Sales Rep"
-      },
-      "deals": []
-    }
-  ],
-  "team_members": []
+  "status": true,
+  "message": "Pipeline retrieved successfully",
+  "data": {
+    "stages": [
+      {
+        "id": "stage_id",
+        "name": "Qualified",
+        "total_deals": 0,
+        "total_value": 0,
+        "position": 2,
+        "is_won": false,
+        "is_lost": false,
+        "assignedTo": {
+          "id": "user_id",
+          "email": "sales@example.com",
+          "name": "Sales Rep"
+        },
+        "deals": []
+      }
+    ],
+    "team_members": []
+  }
 }
 ```
 

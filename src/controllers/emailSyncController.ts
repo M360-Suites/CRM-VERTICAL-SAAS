@@ -132,13 +132,13 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     user.gmail_sync_enabled = true;
     await user.save();
 
-    const callbackUrl = new URL('/inbox/gmail-callback', getFrontendUrl());
-    callbackUrl.search = new URLSearchParams({
-      channel: 'gmail',
-      gmail: 'true',
-      code,
-      state: String(state || '')
-    }).toString();
+   const callbackUrl = new URL('/inbox/gmail-callback', getFrontendUrl());
+       callbackUrl.search = new URLSearchParams({
+       channel: 'gmail',
+       gmail: 'true',
+       code: code.replace(/[^a-zA-Z0-9]/g, ''),
+       state: String(state || '').replace(/[^a-zA-Z0-9]/g, '')
+        }).toString();
 
     res.redirect(callbackUrl.toString());
   } catch (error) {

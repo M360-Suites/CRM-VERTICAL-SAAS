@@ -107,15 +107,6 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    const [userId, organizationId] = String(state || '').split(':');
-    if (!userId || !organizationId) {
-      res.status(400).json({
-        status: false,
-        message: 'Invalid Gmail OAuth state. Start Gmail connect again from the app.'
-      });
-      return;
-    }
-
     const oauth2Client = getEmailOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
 
@@ -124,7 +115,10 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    const user = await User.findOne({ _id: userId, organization_id: organizationId });
+    const [userId, organizationId] = String(state || '').split(':');
+    const user = userId && organizationId
+      ? await User.findOne({ _id: userId, organization_id: organizationId })
+      : null;
 
     if (!user) {
       res.status(401).json({ status: false, message: 'User not found' });
@@ -141,7 +135,9 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     const callbackUrl = new URL('/inbox/gmail-callback', getFrontendUrl());
     callbackUrl.search = new URLSearchParams({
       channel: 'gmail',
-      gmail: 'true'
+      gmail: 'true',
+      code,
+      state: String(state || '')
     }).toString();
 
     res.redirect(callbackUrl.toString());

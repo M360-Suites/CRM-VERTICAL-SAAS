@@ -4,6 +4,7 @@ import {
   getGmailAuthUrl,
   handleGmailCallback,
   syncGmailInbox,
+  disconnectGmail,
   listSyncedMessages,
   createContactFromSender,
   linkMessageToContact,
@@ -133,6 +134,52 @@ router.get('/status', authenticate, gmailStatus);
  *         description: Gmail not connected
  */
 router.post('/sync', authenticate, syncGmailInbox);
+
+/**
+ * @swagger
+ * /email/auth/disconnect:
+ *   delete:
+ *     summary: Disconnect Gmail
+ *     description: Revokes Gmail access when possible, clears stored Gmail tokens, and disables Gmail sync for the authenticated user.
+ *     tags: [Email Sync]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Gmail disconnected
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     connected:
+ *                       type: boolean
+ *                     gmail_sync_enabled:
+ *                       type: boolean
+ *             example:
+ *               status: true
+ *               message: Gmail disconnected successfully
+ *               data:
+ *                 connected: false
+ *                 gmail_sync_enabled: false
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Failed to disconnect Gmail
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.delete('/auth/disconnect', authenticate, disconnectGmail);
 
 /**
  * @swagger

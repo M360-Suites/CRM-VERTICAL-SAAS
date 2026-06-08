@@ -256,6 +256,52 @@ export const syncGmailInbox = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
+export const disconnectGmail = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const user = await User.findOne({ _id: req.user?.id, organization_id: organizationId })
+      .select('google_access_token google_refresh_token gmail_sync_enabled last_gmail_sync_at');
+
+    if (!user) {
+      res.status(401).json({ status: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const refreshToken = user.google_refresh_token ? decryptString(user.google_refresh_token) || '' : '';
+    const accessToken = user.google_access_token ? decryptString(user.google_access_token) || '' : '';
+    const tokenToRevoke = refreshToken || accessToken;
+
+    if (tokenToRevoke && isGmailOAuthConfigured()) {
+      try {
+        const oauth2Client = getEmailOAuth2Client();
+        await oauth2Client.revokeToken(tokenToRevoke);
+      } catch (revokeError) {
+        console.error('Gmail token revoke error:', revokeError);
+      }
+    }
+
+    user.google_access_token = undefined;
+    user.google_refresh_token = undefined;
+    user.gmail_sync_enabled = false;
+    user.last_gmail_sync_at = undefined;
+    await user.save();
+
+    res.json({
+      status: true,
+      message: 'Gmail disconnected successfully',
+      data: {
+        connected: false,
+        gmail_sync_enabled: false
+      }
+    });
+  } catch (error) {
+    console.error('Gmail disconnect error:', error);
+    res.status(500).json({ status: false, message: 'Failed to disconnect Gmail' });
+  }
+};
+
 export const listSyncedMessages = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const organizationId = requireOrganization(req, res);

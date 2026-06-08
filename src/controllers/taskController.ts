@@ -2,7 +2,7 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import { Task, ITask, TaskType, TaskPriority, TaskStatus } from '../models/Task';
 import { Activity } from '../models/Activity';
-import { ApiResponse, AuthRequest } from '../types';
+import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 
 interface TaskQuery {
@@ -74,11 +74,11 @@ export const listTasks = async (req: AuthRequest, res: Response): Promise<void> 
       Task.countDocuments(query)
     ]);
 
-    const response: ApiResponse<ITask[]> = {
+    const response: PaginatedResponse<ITask> = {
       status: true,
       message: 'Tasks retrieved successfully',
-      data: tasks,
-      pagination: {
+      data: {
+        data: tasks,
         total,
         page,
         limit,

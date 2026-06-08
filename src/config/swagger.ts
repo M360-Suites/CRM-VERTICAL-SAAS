@@ -436,12 +436,12 @@ const options: swaggerJsdoc.Options = {
             status: { type: 'boolean', example: true },
             message: { type: 'string', example: 'Tasks retrieved successfully' },
             data: {
-              type: 'array',
-              items: { $ref: '#/components/schemas/Task' },
-            },
-            pagination: {
               type: 'object',
               properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Task' },
+                },
                 total: { type: 'integer', example: 42 },
                 page: { type: 'integer', example: 1 },
                 limit: { type: 'integer', example: 20 },

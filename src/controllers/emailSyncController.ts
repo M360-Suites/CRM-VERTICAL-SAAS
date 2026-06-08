@@ -138,7 +138,7 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
       state: String(state || '')
     });
 
-    res.redirect(`${getFrontendUrl()}/inbox/gmail-callback/channel=gmail?${callbackParams.toString()}`);
+    res.redirect(`${getFrontendUrl()}/inbox/gmail-callback?channel=gmail?${callbackParams.toString()}`);
   } catch (error) {
     console.error('Gmail auth callback error:', error);
     const { statusCode, message } = getGmailOAuthCallbackMessage(error);

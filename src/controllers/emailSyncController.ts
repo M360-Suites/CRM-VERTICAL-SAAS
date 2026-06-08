@@ -135,7 +135,7 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     const callbackUrl = new URL('/inbox/gmail-callback', getFrontendUrl());
     callbackUrl.search = new URLSearchParams({
       channel: 'gmail',
-      gmail: 'connected',
+      gmail: 'true',
       code,
       state: String(state || '')
     }).toString();

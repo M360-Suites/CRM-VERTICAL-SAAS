@@ -811,26 +811,29 @@ export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> 
 };
 
 interface ResetPasswordBody {
-  email: string;
   resetToken: string;
   newPassword: string;
 }
 
 export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { email, resetToken, newPassword } = req.body as ResetPasswordBody;
-    const normalizedEmail = normalizeEmail(email);
+    const { resetToken, newPassword } = req.body as ResetPasswordBody;
 
-    if (!normalizedEmail || !resetToken || !newPassword) {
+    if (!resetToken || !newPassword) {
       res.status(400).json({
         status: false,
-        message: 'Email, reset token, and new password are required'
+        message: 'Reset token and new password are required'
       });
       return;
     }
 
-    const user = await User.findOne({ email: normalizedEmail });
-    if (!user) {
+    const otpRecord = await PasswordResetOtp.findOne({
+      reset_token_hash: hashResetToken(resetToken),
+      used_at: null,
+      reset_token_expires_at: { $gt: new Date() }
+    });
+
+    if (!otpRecord) {
       res.status(400).json({
         status: false,
         message: 'Invalid or expired reset token'
@@ -838,14 +841,8 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const otpRecord = await PasswordResetOtp.findOne({
-      user_id: user._id,
-      reset_token_hash: hashResetToken(resetToken),
-      used_at: null,
-      reset_token_expires_at: { $gt: new Date() }
-    });
-
-    if (!otpRecord) {
+    const user = await User.findById(otpRecord.user_id);
+    if (!user) {
       res.status(400).json({
         status: false,
         message: 'Invalid or expired reset token'

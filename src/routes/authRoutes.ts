@@ -361,11 +361,8 @@ router.post('/verify-otp', authRateLimit, validateBody({
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, resetToken, newPassword]
+ *             required: [resetToken, newPassword]
  *             properties:
- *               email:
- *                 type: string
- *                 format: email
  *               resetToken:
  *                 type: string
  *               newPassword:
@@ -392,7 +389,6 @@ router.post('/verify-otp', authRateLimit, validateBody({
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/reset-password', authRateLimit, validateBody({
-  email: { required: true, type: 'string', maxLength: 254 },
   resetToken: { required: true, type: 'string', maxLength: 128 },
   newPassword: { required: true, type: 'string', minLength: 8, maxLength: 128 }
 }), resetPassword);

@@ -227,9 +227,8 @@ Reset the user's password after OTP verification.
 **Request Body:**
 ```json
 {
-  "email": "string",
-  "otp": "string",
-  "new_password": "string"
+  "resetToken": "string",
+  "newPassword": "string"
 }
 ```
 

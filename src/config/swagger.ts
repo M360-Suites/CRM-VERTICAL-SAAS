@@ -3,7 +3,8 @@ import path from 'path';
 import config from './index';
 
 const swaggerBaseUrl = `http://localhost:${config.PORT}`;
-const routeDocsGlob = path.join(__dirname, '..', 'routes', '*.{ts,js}');
+const sourceRouteDocsGlob = path.join(process.cwd(), 'src', 'routes', '*.{ts,js}');
+const compiledRouteDocsGlob = path.join(__dirname, '..', 'routes', '*.{ts,js}');
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -640,7 +641,7 @@ const options: swaggerJsdoc.Options = {
     },
     security: [{ cookieAuth: [] }],
   },
-  apis: [routeDocsGlob],
+  apis: [sourceRouteDocsGlob, compiledRouteDocsGlob],
 };
 
 export const swaggerSpec = swaggerJsdoc(options);

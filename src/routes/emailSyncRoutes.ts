@@ -160,6 +160,11 @@ router.post('/sync', authenticate, syncGmailInbox);
  *                 data:
  *                   type: object
  *                   properties:
+ *                     message:
+ *                       type: string
+ *                     channel:
+ *                       type: string
+ *                       example: gmail
  *                     connected:
  *                       type: boolean
  *                     gmail_sync_enabled:

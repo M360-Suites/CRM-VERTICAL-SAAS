@@ -457,6 +457,8 @@ export const gmailStatus = async (req: AuthRequest, res: Response): Promise<void
     res.json({
       status: true,
       data: {
+        message: user.google_access_token ? 'Gmail connected' : 'Gmail not connected',
+        channel: 'gmail',
         connected: !!user.google_access_token,
         gmail_sync_enabled: user.gmail_sync_enabled,
         last_sync_at: user.last_gmail_sync_at,

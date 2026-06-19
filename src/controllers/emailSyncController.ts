@@ -39,6 +39,14 @@ const parseEmailAddress = (raw: string): { name: string; address: string } => {
 const isGmailOAuthConfigured = (): boolean =>
   Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.GOOGLE_EMAIL_REDIRECT_URI);
 
+const setGmailNoStoreHeaders = (res: Response): void => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+    Pragma: 'no-cache',
+    Expires: '0'
+  });
+};
+
 const getGmailOAuthCallbackMessage = (error: unknown): { statusCode: number; message: string } => {
   const oauthError = error as GoogleOAuthError;
   const googleError = oauthError.response?.data?.error;
@@ -71,6 +79,8 @@ const getGmailOAuthCallbackMessage = (error: unknown): { statusCode: number; mes
 
 export const getGmailAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    setGmailNoStoreHeaders(res);
+
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
@@ -135,9 +145,11 @@ export const handleGmailCallback = async (req: AuthRequest, res: Response): Prom
     const callbackUrl = new URL('/inbox', getFrontendUrl());
     callbackUrl.search = new URLSearchParams({
       channel: 'gmail',
-      gmail: 'true'
+      gmail: 'true',
+      connected_at: Date.now().toString()
     }).toString();
 
+    setGmailNoStoreHeaders(res);
     res.redirect(callbackUrl.toString());
   } catch (error) {
     console.error('Gmail auth callback error:', error);
@@ -256,6 +268,8 @@ export const syncGmailInbox = async (req: AuthRequest, res: Response): Promise<v
 
 export const disconnectGmail = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    setGmailNoStoreHeaders(res);
+
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
@@ -291,7 +305,8 @@ export const disconnectGmail = async (req: AuthRequest, res: Response): Promise<
       message: 'Gmail disconnected successfully',
       data: {
         connected: false,
-        gmail_sync_enabled: false
+        gmail_sync_enabled: false,
+        disconnected_at: new Date().toISOString()
       }
     });
   } catch (error) {
@@ -441,11 +456,13 @@ export const linkMessageToContact = async (req: AuthRequest, res: Response): Pro
 
 export const gmailStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    setGmailNoStoreHeaders(res);
+
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
     const user = await User.findOne({ _id: req.user?.id, organization_id: organizationId })
-      .select('gmail_sync_enabled last_gmail_sync_at google_access_token');
+      .select('gmail_sync_enabled last_gmail_sync_at google_access_token updated_at');
 
     if (!user) {
       res.status(401).json({ status: false, message: 'Unauthorized' });
@@ -462,6 +479,7 @@ export const gmailStatus = async (req: AuthRequest, res: Response): Promise<void
         connected: !!user.google_access_token,
         gmail_sync_enabled: user.gmail_sync_enabled,
         last_sync_at: user.last_gmail_sync_at,
+        connection_updated_at: user.updated_at,
         synced_count: totalMessages,
       },
     });

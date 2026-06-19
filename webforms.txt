@@ -1,0 +1,118 @@
+Web Forms Feature Plan
+
+Goal
+Build a custom lead-capture webform module for the CRM SaaS.
+Each organization should be able to create public forms that collect leads and feed submissions back into CRM records.
+
+Core Idea
+An admin creates a form inside the CRM.
+The CRM provides a public form URL or embed option.
+Visitors submit the form.
+The backend validates the submission and creates CRM records for the correct organization.
+
+Recommended First Version
+Authenticated form management:
+
+POST /api/v1/webforms
+- Create a webform for the current organization.
+
+GET /api/v1/webforms
+- List webforms for the current organization.
+
+GET /api/v1/webforms/:id
+- Get one webform.
+
+PATCH /api/v1/webforms/:id
+- Update a webform.
+
+DELETE /api/v1/webforms/:id
+- Delete or deactivate a webform.
+
+Public form endpoints:
+
+GET /api/v1/public/webforms/:slug
+- Return public form metadata and fields.
+
+POST /api/v1/public/webforms/:slug/submit
+- Submit a public form.
+
+Suggested WebForm Model
+{
+  organization_id,
+  name,
+  slug,
+  description,
+  fields,
+  success_message,
+  redirect_url,
+  create_contact,
+  create_company,
+  create_deal,
+  deal_stage_id,
+  is_active,
+  created_by,
+  created_at,
+  updated_at
+}
+
+Suggested Field Shape
+{
+  key,
+  label,
+  type,
+  required,
+  placeholder,
+  options,
+  maps_to
+}
+
+Initial supported field types:
+- text
+- email
+- phone
+- textarea
+- select
+- checkbox
+
+Suggested CRM Field Mappings
+- first_name
+- last_name
+- email
+- phone
+- company
+- message
+- source
+- budget
+- interest
+
+Submission Flow
+1. Visitor opens the public form URL.
+2. Frontend fetches form metadata by slug.
+3. Visitor submits form fields.
+4. Backend finds the active form by slug.
+5. Backend validates required fields and field types.
+6. Backend finds or creates a Contact by email inside the form organization.
+7. Backend optionally creates a Company.
+8. Backend optionally creates a Deal.
+9. Backend creates an Activity saying the webform was submitted.
+10. Backend can create an Inbox item or notification for the team.
+11. Backend returns the success message or redirect URL.
+
+Important SaaS Notes
+- Forms must be scoped by organization_id.
+- Public form slugs should be globally unique or namespaced.
+- Public submission endpoints must not require auth.
+- Public endpoints need spam protection, rate limiting, and input size limits.
+- Do not expose internal organization data through the public form endpoint.
+
+Nice Later Additions
+- Embeddable script/widget
+- CAPTCHA or Turnstile
+- File upload fields
+- Conditional fields
+- Custom fields
+- Assignment rules
+- Auto-response emails
+- Pipeline routing
+- Webhook/Zapier-style outbound automation
+- Analytics for views, submissions, conversion rate

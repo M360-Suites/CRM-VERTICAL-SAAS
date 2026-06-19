@@ -298,6 +298,8 @@ export const disconnectGmail = async (req: AuthRequest, res: Response): Promise<
     user.google_refresh_token = undefined;
     user.gmail_sync_enabled = false;
     user.last_gmail_sync_at = undefined;
+
+    await EmailMessage.deleteMany({ user_id: user._id, organization_id: organizationId });
     await user.save();
 
     res.json({

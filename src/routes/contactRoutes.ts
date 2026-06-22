@@ -7,6 +7,7 @@ import type { Request } from 'express';
 import multer from 'multer';
 import {
   listContacts,
+  getAllContacts,
   getContactById,
   createContact,
   updateContact,
@@ -93,6 +94,26 @@ router.use(authenticate);
  *               $ref: '#/components/schemas/ContactPaginatedResponse'
  */
 router.get('/', listContacts);
+
+/**
+ * @swagger
+ * /contacts/all:
+ *   get:
+ *     summary: Get all organization contacts
+ *     description: Returns all contacts scoped to the authenticated user's organization without pagination.
+ *     tags: [Contacts]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Contacts retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ContactListResponse'
+ */
+router.get('/all', getAllContacts);
 
 /**
  * @swagger

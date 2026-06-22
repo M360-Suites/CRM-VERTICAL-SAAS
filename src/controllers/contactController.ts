@@ -92,6 +92,34 @@ export const listContacts = async (req: AuthRequest, res: Response): Promise<voi
 };
 
 /**
+ * Get all contacts
+ * Returns every contact scoped to the authenticated user's organization
+ */
+export const getAllContacts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const contacts = await Contact.find({ organization_id: organizationId })
+      .populate('company_id', 'name industry website')
+      .populate('owner_id', 'email display_name')
+      .sort({ created_at: -1 })
+      .lean();
+
+    res.json({
+      status: true,
+      message: 'All contacts retrieved successfully',
+      data: contacts
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: 'Failed to fetch all contacts'
+    });
+  }
+};
+
+/**
  * Get contact by ID
  * Returns a single contact by their unique identifier
  */

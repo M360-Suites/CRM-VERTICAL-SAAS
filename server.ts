@@ -13,6 +13,7 @@ import connectDB from './src/config/db';
 import authRoutes from './src/routes/authRoutes';
 import userRoutes from './src/routes/userRoutes';
 import contactRoutes from './src/routes/contactRoutes';
+import dealRoutes from './src/routes/dealRoutes';
 import companyRoutes from './src/routes/companyRoutes';
 import taskRoutes from './src/routes/taskRoutes';
 import pipelineRoutes from './src/routes/pipelineRoutes';
@@ -62,6 +63,7 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/contacts', contactRoutes);
+app.use('/api/v1/deals', dealRoutes);
 app.use('/api/v1/companies', companyRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/pipeline', pipelineRoutes);

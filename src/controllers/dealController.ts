@@ -95,6 +95,32 @@ export const listDeals = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
+export const getAllDeals = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const deals = await Deal.find({ organization_id: organizationId })
+      .populate('stage_id', 'name order is_won is_lost')
+      .populate('company_id', 'name industry website')
+      .populate('contact_id', 'first_name last_name email')
+      .populate('owner_id', 'email display_name')
+      .sort({ created_at: -1 })
+      .lean();
+
+    res.json({
+      status: true,
+      message: 'All deals retrieved successfully',
+      data: deals
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: 'Failed to fetch all deals'
+    });
+  }
+};
+
 export const getDealById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };

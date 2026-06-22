@@ -286,6 +286,49 @@ const options: swaggerJsdoc.Options = {
             },
           },
         },
+        ContactListResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'All contacts retrieved successfully' },
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Contact' },
+            },
+          },
+        },
+        Deal: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            title: { type: 'string' },
+            value: { type: 'number', nullable: true },
+            currency: { type: 'string', example: 'USD' },
+            status: { type: 'string', enum: ['open', 'won', 'lost'] },
+            expected_close_date: { type: 'string', format: 'date-time', nullable: true },
+            stage_id: { type: 'string', nullable: true },
+            source: { type: 'string', nullable: true },
+            industry: { type: 'string', nullable: true },
+            company_id: { type: 'string', nullable: true },
+            contact_id: { type: 'string', nullable: true },
+            owner_id: { type: 'string', nullable: true },
+            organization_id: { type: 'string' },
+            stage_changed_at: { type: 'string', format: 'date-time', nullable: true },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
+          },
+        },
+        DealListResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'All deals retrieved successfully' },
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Deal' },
+            },
+          },
+        },
         Company: {
           type: 'object',
           properties: {

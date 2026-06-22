@@ -8,7 +8,10 @@ const router: RouterType = Router();
 router.use(authenticate);
 
 type MulterOptions = NonNullable<Parameters<typeof multer>[0]>;
-type FileFilterCallback = (error: Error | null, acceptFile: boolean) => void;
+type FileFilterCallback = {
+  (error: Error): void;
+  (error: null, acceptFile: boolean): void;
+};
 
 const documentMimeTypes = new Set([
   'application/pdf',

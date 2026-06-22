@@ -31,6 +31,24 @@ const sendMail = async (emailData: EmailData) => {
   }
 };
 
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const roleLabels: Record<string, string> = {
+  admin: 'Admin',
+  sales_manager: 'Sales manager',
+  sales_rep: 'Sales rep',
+  viewer: 'Viewer'
+};
+
+const formatRoleLabel = (role: string): string =>
+  roleLabels[role] ?? role.replace(/_/g, ' ');
+
 export const sendOTPEmail = async (to: string, otp: string): Promise<void> => {
   await sendMail({
     subject: 'Your Password Reset OTP',
@@ -62,14 +80,6 @@ export const sendTaskReminderEmail = async (
     dateStyle: 'medium',
     timeStyle: 'short'
   });
-
-  const escapeHtml = (value: string): string =>
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
 
   const optionalRows = [
     task.location ? `<p><strong>Location:</strong> ${escapeHtml(task.location)}</p>` : '',
@@ -122,14 +132,15 @@ export const sendUserInvitationEmail = async (
     dateStyle: 'medium',
     timeStyle: 'short'
   });
+  const roleLabel = formatRoleLabel(input.role);
 
   await sendMail({
     subject: `You're invited to join ${input.organizationName} on CRM360`,
     message: `
       <h2>You're invited to CRM360</h2>
-      <p>${input.inviterName} invited you to join <strong>${input.organizationName}</strong> as <strong>${input.role}</strong>.</p>
-      <p><a href="${input.inviteUrl}">Accept your invitation</a></p>
-      <p>This invitation expires on ${expiresAt}.</p>
+      <p>${escapeHtml(input.inviterName)} invited you to join <strong>${escapeHtml(input.organizationName)}</strong> as <strong>${escapeHtml(roleLabel)}</strong>.</p>
+      <p><a href="${escapeHtml(input.inviteUrl)}">Accept your invitation</a></p>
+      <p>This invitation expires on ${escapeHtml(expiresAt)}.</p>
       <p>If you were not expecting this invite, you can ignore this email.</p>
     `,
     mailType: 'html',

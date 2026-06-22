@@ -7,6 +7,7 @@ import {
   listUsers,
   getUserById,
   createUser,
+  updateUser,
   inviteUser,
   listInvitations,
   revokeInvitation,
@@ -225,6 +226,54 @@ router.get('/:id', authenticate, authorize('admin'), getUserById);
  *         description: Invalid input
  */
 router.post('/', authenticate, authorize('admin'), createUser);
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   patch:
+ *     summary: Update organization user
+ *     description: Admin-only. Updates editable staff fields for a user inside the authenticated user's organization.
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               display_name:
+ *                 type: string
+ *               avatar_url:
+ *                 type: string
+ *                 nullable: true
+ *               role:
+ *                 type: string
+ *                 enum: [admin, sales_manager, sales_rep, viewer]
+ *               is_active:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: User not found
+ */
+router.patch('/:id', authenticate, authorize('admin'), validateBody({
+  display_name: { type: 'string', maxLength: 120 },
+  avatar_url: { type: 'string', maxLength: 2048 },
+  role: { type: 'string', enum: ['admin', 'sales_manager', 'sales_rep', 'viewer'] },
+  is_active: { type: 'boolean' }
+}), updateUser);
 
 /**
  * @swagger

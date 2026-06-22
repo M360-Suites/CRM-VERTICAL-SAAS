@@ -4,6 +4,7 @@
  */
 import { Response } from 'express';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import { User, IUser, UserRole } from '../models/User';
 import { Organization } from '../models/Organization';
 import { UserInvitation } from '../models/UserInvitation';
@@ -30,6 +31,13 @@ interface AcceptInvitationBody {
   token: string;
   password: string;
   display_name?: string;
+}
+
+interface UpdateUserBody {
+  display_name?: string;
+  avatar_url?: string | null;
+  role?: UserRole;
+  is_active?: boolean;
 }
 
 const validRoles: UserRole[] = ['admin', 'sales_manager', 'sales_rep', 'viewer'];
@@ -183,6 +191,75 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     res.status(500).json({
       status: false,
       message: 'Failed to create user'
+    });
+  }
+};
+
+export const updateUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params as { id: string };
+    const { display_name, avatar_url, role, is_active } = req.body as UpdateUserBody;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ status: false, message: 'Invalid user ID' });
+      return;
+    }
+
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const update: Record<string, unknown> = {};
+
+    if (display_name !== undefined) {
+      const normalizedDisplayName = display_name.trim();
+      if (!normalizedDisplayName) {
+        res.status(400).json({ status: false, message: 'display_name cannot be empty' });
+        return;
+      }
+      update.display_name = normalizedDisplayName;
+    }
+
+    if (avatar_url !== undefined) {
+      update.avatar_url = avatar_url || null;
+    }
+
+    if (role !== undefined) {
+      if (!validRoles.includes(role)) {
+        res.status(400).json({ status: false, message: 'Invalid role' });
+        return;
+      }
+      update.role = role;
+    }
+
+    if (is_active !== undefined) {
+      update.is_active = is_active;
+    }
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ status: false, message: 'No valid fields provided' });
+      return;
+    }
+
+    const user = await User.findOneAndUpdate(
+      { _id: id, organization_id: organizationId },
+      { $set: update },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      res.status(404).json({ status: false, message: 'User not found' });
+      return;
+    }
+
+    res.json({
+      status: true,
+      message: 'User updated successfully',
+      data: user
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: 'Failed to update user'
     });
   }
 };

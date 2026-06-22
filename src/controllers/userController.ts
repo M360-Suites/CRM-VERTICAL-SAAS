@@ -43,8 +43,15 @@ const normalizeEmail = (email?: string): string | null => {
   return normalized || null;
 };
 
-const getInviteAcceptUrl = (token: string): string => {
-  return `${getFrontendUrl(process.env.FRONTEND_INVITE_URL)}/accept-invite?token=${encodeURIComponent(token)}`;
+const getInviteAcceptUrl = (token: string, displayName?: string): string => {
+  const params = new URLSearchParams({ token });
+  const normalizedDisplayName = displayName?.trim();
+
+  if (normalizedDisplayName) {
+    params.set('display_name', normalizedDisplayName);
+  }
+
+  return `${getFrontendUrl(process.env.FRONTEND_INVITE_URL)}/accept-invite?${params.toString()}`;
 };
 
 /**
@@ -237,7 +244,7 @@ export const inviteUser = async (req: AuthRequest, res: Response): Promise<void>
     await sendUserInvitationEmail(normalizedEmail, {
       organizationName: organization?.name || 'your organization',
       inviterName: req.user.display_name || req.user.email,
-      inviteUrl: getInviteAcceptUrl(rawToken),
+      inviteUrl: getInviteAcceptUrl(rawToken, invitation.display_name),
       role,
       expiresAt
     });

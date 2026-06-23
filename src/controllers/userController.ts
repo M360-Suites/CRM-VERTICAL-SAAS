@@ -60,7 +60,7 @@ const getInviteAcceptUrl = (token: string, displayName?: string): string => {
     params.set('display_name', normalizedDisplayName);
   }
 
-  return `${getFrontendUrl(process.env.FRONTEND_INVITE_URL)}/accept-invite?${params.toString()}`;
+  return `${getFrontendUrl(process.env.FRONTEND_INVITE_URL)}/reset-password?${params.toString()}`;
 };
 
 /**

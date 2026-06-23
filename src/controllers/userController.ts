@@ -28,7 +28,8 @@ interface InviteUserBody {
 }
 
 interface AcceptInvitationBody {
-  token: string;
+  invitationToken?: string;
+  token?: string;
   password: string;
   display_name?: string;
 }
@@ -52,7 +53,7 @@ const normalizeEmail = (email?: string): string | null => {
 };
 
 const getInviteAcceptUrl = (token: string, displayName?: string): string => {
-  const params = new URLSearchParams({ token });
+  const params = new URLSearchParams({ invitationToken: token });
   const normalizedDisplayName = displayName?.trim();
 
   if (normalizedDisplayName) {
@@ -396,10 +397,11 @@ export const revokeInvitation = async (req: AuthRequest, res: Response): Promise
 
 export const acceptInvitation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { token, password, display_name } = req.body as AcceptInvitationBody;
+    const { invitationToken, token, password, display_name } = req.body as AcceptInvitationBody;
+    const inviteToken = invitationToken || token;
 
-    if (!token || !password) {
-      res.status(400).json({ status: false, message: 'Token and password are required' });
+    if (!inviteToken || !password) {
+      res.status(400).json({ status: false, message: 'Invitation token and password are required' });
       return;
     }
 
@@ -409,7 +411,7 @@ export const acceptInvitation = async (req: AuthRequest, res: Response): Promise
     }
 
     const invitation = await UserInvitation.findOne({
-      token_hash: hashInviteToken(token),
+      token_hash: hashInviteToken(inviteToken),
       accepted_at: null,
       revoked_at: null,
       expires_at: { $gt: new Date() }

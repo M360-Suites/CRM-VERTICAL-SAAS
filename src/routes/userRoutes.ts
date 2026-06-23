@@ -36,9 +36,9 @@ const router: RouterType = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [token, password]
+ *             required: [invitationToken, password]
  *             properties:
- *               token:
+ *               invitationToken:
  *                 type: string
  *               password:
  *                 type: string
@@ -52,7 +52,8 @@ const router: RouterType = Router();
  *         description: Invalid or expired invitation
  */
 router.post('/invitations/accept', authRateLimit, validateBody({
-  token: { required: true, type: 'string', minLength: 32, maxLength: 128 },
+  invitationToken: { type: 'string', minLength: 32, maxLength: 128 },
+  token: { type: 'string', minLength: 32, maxLength: 128 },
   password: { required: true, type: 'string', minLength: 8, maxLength: 128 },
   display_name: { type: 'string', maxLength: 120 }
 }), acceptInvitation);

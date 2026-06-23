@@ -351,7 +351,12 @@ export const listInvitations = async (req: AuthRequest, res: Response): Promise<
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const invitations = await UserInvitation.find({ organization_id: organizationId })
+    const invitations = await UserInvitation.find({
+      organization_id: organizationId,
+      accepted_at: null,
+      revoked_at: null,
+      expires_at: { $gt: new Date() }
+    })
       .populate('invited_by', 'email display_name')
       .sort({ created_at: -1 })
       .lean();

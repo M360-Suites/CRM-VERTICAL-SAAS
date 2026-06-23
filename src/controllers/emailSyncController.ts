@@ -7,6 +7,7 @@ import config from '../config';
 import { requireOrganization } from '../utils/tenant';
 import { decryptString, encryptString } from '../utils/crypto';
 import { GMAIL_SCOPES, getAuthedGmail, getEmailOAuth2Client } from '../utils/gmail';
+import { clearGmailConnection, getSafeGoogleErrorLog, isInvalidGoogleGrantError } from '../utils/gmailConnection';
 import { getFrontendUrl } from '../utils/frontend';
 
 type GoogleOAuthError = {
@@ -257,7 +258,25 @@ export const syncGmailInbox = async (req: AuthRequest, res: Response): Promise<v
       data: { synced, total: totalMessages, linked },
     });
   } catch (error: any) {
-    console.error('Gmail sync error:', error);
+    console.error('Gmail sync error:', getSafeGoogleErrorLog(error));
+    if (isInvalidGoogleGrantError(error)) {
+      const organizationId = req.user?.organization_id;
+      const user = organizationId
+        ? await User.findOne({ _id: req.user?.id, organization_id: organizationId })
+        : null;
+
+      if (user) {
+        await clearGmailConnection(user);
+      }
+
+      res.status(401).json({
+        status: false,
+        code: 'GMAIL_RECONNECT_REQUIRED',
+        message: 'Gmail access was revoked or expired. Please reconnect Gmail.'
+      });
+      return;
+    }
+
     if (error?.response?.status === 401) {
       res.status(401).json({ status: false, message: 'Gmail access expired. Please re-authorize.' });
       return;

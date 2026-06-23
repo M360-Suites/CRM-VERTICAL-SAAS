@@ -14,10 +14,11 @@ import { Contact } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { Company } from '../models/Company';
 import { Activity } from '../models/Activity';
-import { User } from '../models/User';
+import { IUser, User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
 import { decryptString } from '../utils/crypto';
 import { createRawEmail, getAuthedGmail, RawEmailAttachment } from '../utils/gmail';
+import { clearGmailConnection, getSafeGoogleErrorLog, isInvalidGoogleGrantError } from '../utils/gmailConnection';
 
 interface GenerateEmailBody {
   contact_id?: string;
@@ -190,6 +191,7 @@ const normalizeKeyPoints = (value: unknown): { keyPoints?: string[]; error?: str
 };
 
 const getGmailSendErrorMessage = (error: any): string => {
+  if (isInvalidGoogleGrantError(error)) return 'Gmail access was revoked or expired. Please reconnect Gmail.';
   const status = error?.response?.status || error?.code;
   if (status === 401) return 'Gmail access expired. Please reconnect Google.';
   if (status === 403) return 'Gmail send permission missing. Please reconnect Google so the app can request send access.';
@@ -301,6 +303,8 @@ export const generateEmailHandler = async (req: AuthRequest, res: Response): Pro
 };
 
 export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  let gmailUser: IUser | null = null;
+
   try {
     const body = req.body as SendEmailBody;
     const contactId = asTrimmedString(body.contact_id, 80);
@@ -373,13 +377,12 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const user = await User.findOne({ _id: req.user?.id, organization_id: organizationId })
-      .select('email display_name google_access_token google_refresh_token')
-      .lean();
+    gmailUser = await User.findOne({ _id: req.user?.id, organization_id: organizationId })
+      .select('email display_name google_access_token google_refresh_token gmail_sync_enabled last_gmail_sync_at');
 
-    const accessToken = user?.google_access_token ? decryptString(user.google_access_token) || '' : '';
-    const refreshToken = user?.google_refresh_token ? decryptString(user.google_refresh_token) || '' : '';
-    if (!user || !accessToken) {
+    const accessToken = gmailUser?.google_access_token ? decryptString(gmailUser.google_access_token) || '' : '';
+    const refreshToken = gmailUser?.google_refresh_token ? decryptString(gmailUser.google_refresh_token) || '' : '';
+    if (!gmailUser || !accessToken) {
       res.status(400).json({
         status: false,
         message: 'Gmail not connected. Please connect Google before sending email.'
@@ -393,8 +396,8 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
       requestBody: {
         raw: createRawEmail({
           from: {
-            address: user.email,
-            name: user.display_name
+            address: gmailUser.email,
+            name: gmailUser.display_name
           },
           to: dedupedRecipients,
           subject: subject as string,
@@ -445,8 +448,8 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
           size: attachment.content.length
         })),
         from: {
-          address: user.email,
-          name: user.display_name
+          address: gmailUser.email,
+          name: gmailUser.display_name
         },
         gmail_message_id: sendResult.data.id,
         thread_id: sendResult.data.threadId,
@@ -454,7 +457,17 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
       }
     });
   } catch (error: any) {
-    console.error('Email send error:', error);
+    console.error('Email send error:', getSafeGoogleErrorLog(error));
+    if (gmailUser && isInvalidGoogleGrantError(error)) {
+      await clearGmailConnection(gmailUser);
+      res.status(401).json({
+        status: false,
+        code: 'GMAIL_RECONNECT_REQUIRED',
+        message: getGmailSendErrorMessage(error)
+      });
+      return;
+    }
+
     const status = error?.response?.status || error?.code;
     res.status(status === 401 ? 401 : status === 403 ? 403 : 500).json({
       status: false,

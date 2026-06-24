@@ -1,0 +1,229 @@
+CRM360 PRIVACY POLICY
+
+Effective date: [Insert Date]
+
+CRM360 ("CRM360", "we", "us", or "our") respects your privacy. This Privacy Policy explains how we collect, use, store, and protect information when you use our website, application, and related services.
+
+By using CRM360, you agree to the collection and use of information described in this Privacy Policy.
+
+1. Information We Collect
+
+We may collect the following types of information:
+
+Account Information
+When you create an account or are invited to use CRM360, we may collect your name, email address, password, organization name, role, and profile information.
+
+Customer Relationship Data
+CRM360 allows users to manage contacts, companies, deals, tasks, documents, emails, notes, and related business records. This information is provided by users and belongs to the organization using the service.
+
+Email and Integration Data
+If you connect an email account or third-party service, we may process email metadata, messages, recipients, attachments, and related information needed to provide email sync, sending, and CRM features.
+
+Usage Information
+We may collect information about how you use CRM360, such as pages visited, features used, actions taken, device type, browser type, IP address, and log data.
+
+Cookies and Similar Technologies
+We may use cookies or similar technologies to keep users signed in, improve security, remember preferences, and analyze product usage.
+
+2. How We Use Information
+
+We use collected information to:
+
+- Provide, operate, and improve CRM360.
+- Create and manage user accounts.
+- Manage CRM records such as contacts, companies, deals, tasks, documents, and emails.
+- Authenticate users and protect accounts.
+- Send verification emails, invitations, reminders, and service notifications.
+- Provide customer support.
+- Monitor usage, fix bugs, and improve performance.
+- Comply with legal obligations and enforce our terms.
+
+3. How We Share Information
+
+We do not sell users' personal information.
+
+We may share information only in the following situations:
+
+- With authorized users within the same organization account.
+- With service providers who help us operate CRM360, such as hosting, email delivery, cloud storage, analytics, and security providers.
+- With third-party integrations when a user authorizes the connection.
+- If required by law, regulation, court order, or legal process.
+- To protect the rights, safety, and security of CRM360, our users, or others.
+- In connection with a business transfer, such as a merger, acquisition, or sale of assets.
+
+4. Data Storage and Security
+
+We use reasonable technical and organizational measures to protect information from unauthorized access, loss, misuse, alteration, or disclosure. However, no internet-based service is completely secure, and we cannot guarantee absolute security.
+
+Users are responsible for keeping their login credentials secure and for controlling access to their organization account.
+
+5. Data Retention
+
+We retain information for as long as needed to provide CRM360, comply with legal obligations, resolve disputes, enforce agreements, and maintain business records.
+
+Organizations may request deletion of account or business data, subject to legal, security, backup, and operational requirements.
+
+6. User Choices and Rights
+
+Depending on your location, you may have rights to access, update, correct, export, restrict, or delete certain personal information.
+
+Users can update certain account information inside CRM360. For additional requests, contact us using the information below.
+
+7. Third-Party Services
+
+CRM360 may integrate with third-party services such as email providers, cloud storage providers, or communication tools. Your use of those third-party services may be governed by their own privacy policies and terms.
+
+We are not responsible for the privacy practices of third-party services.
+
+8. Children's Privacy
+
+CRM360 is intended for business use and is not directed to children under 13 years old. We do not knowingly collect personal information from children.
+
+9. International Users
+
+If you access CRM360 from outside the country where our systems or service providers are located, your information may be transferred to and processed in other countries. By using CRM360, you consent to such transfers where permitted by law.
+
+10. Changes to This Privacy Policy
+
+We may update this Privacy Policy from time to time. When we make changes, we will update the effective date above. Continued use of CRM360 after changes means you accept the updated Privacy Policy.
+
+11. Contact Us
+
+If you have questions about this Privacy Policy or how your information is handled, contact us at:
+
+Email: [Insert Support or Privacy Email]
+Company/Operator: [Insert Legal Company Name]
+Address: [Insert Business Address, if required]
+
+
+CRM360 TERMS OF SERVICE
+
+Effective date: [Insert Date]
+
+These Terms of Service ("Terms") govern your access to and use of CRM360, including our website, application, APIs, and related services. By creating an account, accepting an invitation, or using CRM360, you agree to these Terms.
+
+If you are using CRM360 on behalf of a company or organization, you represent that you have authority to accept these Terms on behalf of that organization.
+
+1. Use of the Service
+
+CRM360 is a customer relationship management platform that helps organizations manage users, contacts, companies, deals, pipelines, tasks, documents, emails, reports, and related business workflows.
+
+You may use CRM360 only in compliance with these Terms, applicable laws, and any documentation or policies we provide.
+
+2. Accounts and Access
+
+Users must provide accurate account information and keep login credentials secure.
+
+You are responsible for all activity that occurs under your account. You must notify us immediately if you suspect unauthorized access or a security issue.
+
+Organizations are responsible for managing user roles, permissions, invitations, and access to organization data.
+
+3. Acceptable Use
+
+You agree not to:
+
+- Use CRM360 for unlawful, fraudulent, harmful, or abusive purposes.
+- Upload or share content that violates any law or third-party rights.
+- Attempt to gain unauthorized access to CRM360, other accounts, or related systems.
+- Interfere with, disrupt, overload, or damage the service.
+- Reverse engineer, copy, resell, or exploit CRM360 except as permitted by law or written agreement.
+- Use CRM360 to send spam, phishing messages, malware, or unauthorized communications.
+- Misrepresent your identity or affiliation with any person or organization.
+
+4. Organization Data and User Content
+
+You retain ownership of the data and content you submit to CRM360, including contacts, companies, deals, documents, emails, notes, and related CRM records.
+
+You grant us permission to process, store, transmit, and display this data only as needed to provide, secure, support, and improve CRM360.
+
+You are responsible for ensuring that you have the necessary rights and permissions to upload, process, and use any data entered into CRM360.
+
+5. Email and Third-Party Integrations
+
+CRM360 may allow users to connect email accounts or third-party services. By connecting an integration, you authorize CRM360 to access and process the information required to provide the integration features.
+
+You are responsible for complying with the terms and policies of any connected third-party service.
+
+We may suspend or disable integrations if required for security, compliance, provider policy, or service reliability reasons.
+
+6. Fees and Payment
+
+If CRM360 offers paid plans, you agree to pay all applicable fees according to the plan, billing terms, and payment method selected.
+
+Fees are non-refundable unless required by law or stated otherwise in a separate written agreement.
+
+We may change pricing or plan features by providing reasonable notice where required.
+
+7. Service Availability
+
+We aim to keep CRM360 available and reliable, but we do not guarantee uninterrupted or error-free service.
+
+We may modify, suspend, or discontinue parts of the service for maintenance, updates, security, legal, or business reasons.
+
+8. Security
+
+We use reasonable measures to protect CRM360 and user data. However, no system is completely secure.
+
+You are responsible for using strong passwords, protecting credentials, managing user access, and ensuring your organization follows appropriate security practices.
+
+9. Intellectual Property
+
+CRM360, including its software, design, features, branding, documentation, and technology, is owned by us or our licensors and is protected by intellectual property laws.
+
+These Terms do not give you ownership of CRM360 or any related intellectual property.
+
+10. Confidentiality
+
+Users and organizations may access confidential business information through CRM360. You agree to use such information only for authorized business purposes and to protect it from unauthorized access or disclosure.
+
+11. Termination
+
+You may stop using CRM360 at any time.
+
+We may suspend or terminate access if you violate these Terms, create security or legal risk, fail to pay applicable fees, or use the service in a harmful or unlawful way.
+
+Upon termination, access to CRM360 may be disabled. We may retain or delete data according to our Privacy Policy, legal obligations, backup practices, and any applicable agreement.
+
+12. Disclaimers
+
+CRM360 is provided "as is" and "as available" without warranties of any kind, whether express, implied, or statutory.
+
+We do not guarantee that CRM360 will be uninterrupted, error-free, secure, or suitable for every business purpose.
+
+13. Limitation of Liability
+
+To the maximum extent permitted by law, CRM360 and its operators will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, including loss of profits, revenue, data, goodwill, or business opportunities.
+
+To the maximum extent permitted by law, our total liability for any claim related to CRM360 will not exceed the amount paid by you for the service during the three months before the claim arose, or [Insert Amount] if no fees were paid.
+
+14. Indemnification
+
+You agree to defend, indemnify, and hold harmless CRM360 and its operators from claims, damages, liabilities, losses, and expenses arising from your use of CRM360, your data, your violation of these Terms, or your violation of any law or third-party rights.
+
+15. Changes to These Terms
+
+We may update these Terms from time to time. When changes are made, we will update the effective date above. Continued use of CRM360 after changes means you accept the updated Terms.
+
+16. Governing Law
+
+These Terms are governed by the laws of [Insert Governing Jurisdiction], without regard to conflict of law rules.
+
+17. Contact Us
+
+If you have questions about these Terms, contact us at:
+
+Email: [Insert Support or Legal Email]
+Company/Operator: [Insert Legal Company Name]
+Address: [Insert Business Address, if required]
+
+
+FRONTEND ROUTE SUGGESTIONS
+
+Privacy Policy page:
+/privacy-policy
+
+Terms of Service page:
+/terms-of-service
+
+Important:
+Before publishing, replace all bracketed placeholders with the correct business details. This draft is general website/app copy and should be reviewed by a qualified legal professional before production use.

@@ -642,11 +642,14 @@ All pipeline routes require authentication and are available under `/pipeline`.
         "position": 2,
         "is_won": false,
         "is_lost": false,
-        "assignedTo": {
-          "id": "user_id",
-          "email": "sales@example.com",
-          "name": "Sales Rep"
-        },
+        "assignees": [
+          {
+            "id": "user_id",
+            "email": "sales@example.com",
+            "name": "Sales Rep",
+            "display_name": "Sales Rep"
+          }
+        ],
         "deals": []
       }
     ],
@@ -684,6 +687,46 @@ This creates a `stage_change` activity.
 ```json
 {
   "user_id": "user_id"
+}
+```
+
+**Response (201):**
+```json
+{
+  "status": true,
+  "message": "Team member assigned to stage successfully",
+  "data": {
+    "stage_id": "stage_id",
+    "user_id": "user_id",
+    "user": {
+      "id": "user_id",
+      "email": "user@example.com",
+      "name": "User Name",
+      "display_name": "User Name"
+    },
+    "assignees": [
+      {
+        "id": "user_id",
+        "email": "user@example.com",
+        "name": "User Name",
+        "display_name": "User Name"
+      }
+    ]
+  }
+}
+```
+
+#### DELETE /pipeline/stages/:stageId/assignees/:userId
+**Response (200):**
+```json
+{
+  "status": true,
+  "message": "Team member removed from stage successfully",
+  "data": {
+    "stage_id": "stage_id",
+    "removed_user_id": "user_id",
+    "assignees": []
+  }
 }
 ```
 

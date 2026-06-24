@@ -61,6 +61,19 @@ const formatTeamMember = (user: {
   email: user.email
 });
 
+const formatStageAssignees = (
+  assigneeIds: unknown[],
+  teamMemberById: Map<string | undefined, ReturnType<typeof formatTeamMember>>
+): ReturnType<typeof formatTeamMember>[] => {
+  return (assigneeIds || [])
+    .map((id) => {
+      if (id === null || id === undefined) return null;
+      const key = typeof id === 'string' ? id : String(id);
+      return teamMemberById.get(key) || null;
+    })
+    .filter((member): member is ReturnType<typeof formatTeamMember> => !!member);
+};
+
 const formatDeal = (deal: {
   _id: unknown;
   title: string;
@@ -131,8 +144,13 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
 
     const formattedDeals = deals.map(formatDeal);
     const formattedTeamMembers = teamMembers.map(formatTeamMember);
-    const teamMemberById = new Map(
-      formattedTeamMembers.map((member) => [member.id?.toString(), member])
+    const teamMemberById = new Map<string, ReturnType<typeof formatTeamMember>>(
+      formattedTeamMembers
+        .map((member) => {
+          const key = member.id !== undefined && member.id !== null ? String(member.id) : null;
+          return key ? ([key, member] as [string, ReturnType<typeof formatTeamMember>]) : null;
+        })
+        .filter((entry): entry is [string, ReturnType<typeof formatTeamMember>] => !!entry)
     );
 
     const response: ApiResponse<{
@@ -144,9 +162,7 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
       data: {
         stages: stages.map((stage) => {
           const stageDeals = formattedDeals.filter((deal) => deal.stage_id?.toString() === stage._id.toString());
-          const assignedTo = stage.assignees?.[0]
-            ? teamMemberById.get(stage.assignees[0].toString()) || null
-            : null;
+          const assignees = formatStageAssignees(stage.assignees || [], teamMemberById);
 
           return {
             id: stage._id,
@@ -156,7 +172,7 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
             position: stage.order,
             is_won: stage.is_won,
             is_lost: stage.is_lost,
-            assignedTo,
+            assignees,
             deals: stageDeals
           };
         }),
@@ -504,30 +520,56 @@ export const assignPipelineStageMember = async (req: AuthRequest, res: Response)
     const { user_id } = req.body as { user_id?: string };
 
     if (!isValidObjectId(stageId) || !isValidObjectId(user_id)) {
-      res.status(400).json({ message: 'Valid stageId and user_id are required' });
+      res.status(400).json({ status: false, message: 'Valid stageId and user_id are required' });
       return;
     }
 
-    const user = await User.exists({ _id: user_id, organization_id: organizationId, is_active: true });
+    const [user, stage] = await Promise.all([
+      User.findOne({ _id: user_id, organization_id: organizationId, is_active: true })
+        .select('_id email display_name')
+        .lean(),
+      PipelineStage.findOne({ _id: stageId, organization_id: organizationId })
+        .select('_id assignees')
+        .lean()
+    ]);
+
     if (!user) {
-      res.status(404).json({ message: 'User not found' });
+      res.status(404).json({ status: false, message: 'User not found' });
       return;
     }
 
-    const stage = await PipelineStage.findOneAndUpdate(
+    if (!stage) {
+      res.status(404).json({ status: false, message: 'Stage not found' });
+      return;
+    }
+
+    const updatedStage = await PipelineStage.findOneAndUpdate(
       { _id: stageId, organization_id: organizationId },
       { $addToSet: { assignees: toObjectId(user_id) } },
       { new: true }
-    ).lean();
+    ).select('_id assignees').lean();
 
-    if (!stage) {
-      res.status(404).json({ message: 'Stage not found' });
+    if (!updatedStage) {
+      res.status(404).json({ status: false, message: 'Failed to update stage' });
       return;
     }
 
-    res.status(201).json({ stage_id: stage._id, user_id });
+    const assignees = formatStageAssignees(updatedStage.assignees || [], new Map(
+      [user].map((u) => [u._id.toString(), formatTeamMember(u as any)])
+    ));
+
+    res.status(201).json({
+      status: true,
+      message: 'Team member assigned to stage successfully',
+      data: {
+        stage_id: stageId,
+        user_id,
+        user: formatTeamMember(user as any),
+        assignees
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to assign team member' });
+    res.status(500).json({ status: false, message: 'Failed to assign team member' });
   }
 };
 
@@ -538,7 +580,7 @@ export const removePipelineStageMember = async (req: AuthRequest, res: Response)
 
     const { stageId, userId } = req.params as { stageId: string; userId: string };
     if (!isValidObjectId(stageId) || !isValidObjectId(userId)) {
-      res.status(400).json({ message: 'Valid stageId and userId are required' });
+      res.status(400).json({ status: false, message: 'Valid stageId and userId are required' });
       return;
     }
 
@@ -546,16 +588,35 @@ export const removePipelineStageMember = async (req: AuthRequest, res: Response)
       { _id: stageId, organization_id: organizationId },
       { $pull: { assignees: toObjectId(userId) } },
       { new: true }
-    );
+    ).select('_id assignees').lean();
 
     if (!stage) {
-      res.status(404).json({ message: 'Stage not found' });
+      res.status(404).json({ status: false, message: 'Stage not found' });
       return;
     }
 
-    res.json({ message: 'Stage assignee removed successfully' });
+    const remainingAssignees = await User.find({ _id: { $in: stage.assignees || [] }, organization_id: organizationId, is_active: true })
+      .select('_id email display_name')
+      .sort({ display_name: 1, email: 1 })
+      .lean();
+
+    const teamMemberById = new Map(
+      remainingAssignees.map((user) => [user._id.toString(), formatTeamMember(user as any)])
+    );
+
+    const assignees = formatStageAssignees(stage.assignees || [], teamMemberById);
+
+    res.json({
+      status: true,
+      message: 'Team member removed from stage successfully',
+      data: {
+        stage_id: stageId,
+        removed_user_id: userId,
+        assignees
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to remove stage assignee' });
+    res.status(500).json({ status: false, message: 'Failed to remove stage assignee' });
   }
 };
 

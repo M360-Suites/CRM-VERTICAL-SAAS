@@ -4,6 +4,7 @@
  */
 import config from './src/config';
 import path from 'path';
+import http from 'http';
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -24,11 +25,16 @@ import documentRoutes from './src/routes/documentRoutes';
 import folderRoutes from './src/routes/folderRoutes';
 import emailSyncRoutes from './src/routes/emailSyncRoutes';
 import dashboardRoutes from './src/routes/dashboardRoutes';
+import notificationRoutes from './src/routes/notificationRoutes';
+import socialAccountRoutes from './src/routes/socialAccountRoutes';
+import webhookRoutes from './src/routes/webhookRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { startTaskReminderService } from './src/services/taskReminderService';
+import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = config.PORT;
 
 type RequestParseError = Error & {
@@ -40,6 +46,19 @@ type RequestParseError = Error & {
 app.set('trust proxy', 1);
 app.use(securityHeaders);
 app.use(rateLimit);
+
+/** Raw body capture for webhook signature verification */
+app.use('/api/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req: Request, _res: Response, next: NextFunction) => {
+  if (Buffer.isBuffer(req.body)) {
+    (req as unknown as Record<string, unknown>).rawBody = req.body.toString('utf8');
+    try {
+      req.body = JSON.parse((req as unknown as Record<string, unknown>).rawBody as string);
+    } catch {
+      req.body = {};
+    }
+  }
+  next();
+});
 
 /** Parse JSON and URL-encoded bodies */
 app.use(express.json({ limit: '1mb' }));
@@ -74,6 +93,9 @@ app.use('/api/v1/folders', folderRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/email', emailSyncRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/social-accounts', socialAccountRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 /** Global error handler */
 app.use((err: RequestParseError, req: Request, res: Response, next: NextFunction) => {
@@ -100,8 +122,9 @@ const startServer = async () => {
     await connectDB();
     await seedPipeline();
     startTaskReminderService();
+    initializeSocket(httpServer);
 
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {

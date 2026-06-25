@@ -35,6 +35,7 @@ const config = {
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
   ORIGIN: process.env.ORIGIN,
+  BACKEND_URL: process.env.BACKEND_URL,
   FRONTEND_URL: process.env.FRONTEND_URL,
   GOOGLE_EMAIL_REDIRECT_URI: process.env.GOOGLE_EMAIL_REDIRECT_URI,
   ENSEND_SECRET: process.env.ENSEND_SECRET!,
@@ -46,7 +47,10 @@ const config = {
   GROQ_MODEL: process.env.GROQ_MODEL ?? 'openai/gpt-oss-20b',
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME!,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY!,
-  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET!
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET!,
+  UNIPILE_API_KEY: process.env.UNIPILE_API_KEY,
+  UNIPILE_DSN: process.env.UNIPILE_DSN ?? 'api51.unipile.com:18170',
+  UNIPILE_WEBHOOK_SECRET: process.env.UNIPILE_WEBHOOK_SECRET
 };
 
 export default config;

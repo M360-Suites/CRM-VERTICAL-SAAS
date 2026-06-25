@@ -1,24 +1,8 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import config from '../config';
 import { SocialAccount } from '../models/SocialAccount';
 import { Notification } from '../models/Notification';
 import { emitNotification } from '../services/socketService';
-
-const validateWebhook = (req: Request): boolean => {
-  const signature = req.headers['x-unipile-signature'] as string;
-  if (!signature || !config.UNIPILE_WEBHOOK_SECRET) return false;
-
-  const rawBody = (req as unknown as Record<string, unknown>).rawBody as string | undefined;
-  if (!rawBody) return false;
-
-  const expected = crypto
-    .createHmac('sha256', config.UNIPILE_WEBHOOK_SECRET)
-    .update(rawBody)
-    .digest('hex');
-
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-};
 
 const providerFromUnipile = (unipileProvider: string): string => {
   const map: Record<string, string> = {
@@ -40,43 +24,26 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
     console.log('WEBHOOK HIT');
     console.log(JSON.stringify(req.body, null, 2));
 
-    if (!validateWebhook(req)) {
-      console.warn('[Unipile Webhook] Invalid signature');
-      res.status(200).json({ status: true });
-      return;
-    }
-
     const event = req.body;
 
-    console.log(`[Unipile Webhook] Event type received: "${event.type}"`);
-
-    if (event.type === 'account.created' || event.type === 'account.connected') {
-      const accountId = event.account_id || event.id;
-      const unipileProvider = event.provider;
+    if (event.status === 'CREATION_SUCCESS') {
+      const accountId = event.account_id;
       const userId = event.name;
+      const accountType = event.account_type;
 
-      console.log('[Unipile Webhook] account event fields:', {
-        accountId,
-        provider: unipileProvider,
-        userId,
-        hasAccountId: !!accountId,
-        hasProvider: !!unipileProvider,
-        hasUserId: !!userId
+      console.log('[Unipile Webhook] CREATION_SUCCESS event:', {
+        account_id: accountId,
+        name: userId,
+        account_type: accountType
       });
 
-      if (!accountId || !userId) {
-        console.warn('[Unipile Webhook] Missing accountId or userId in account event — cannot create SocialAccount');
+      if (!accountId || !userId || !accountType) {
+        console.warn('[Unipile Webhook] Missing fields in CREATION_SUCCESS — cannot create SocialAccount');
         res.status(200).json({ status: true });
         return;
       }
 
-      if (!unipileProvider) {
-        console.warn('[Unipile Webhook] Missing provider in account event — cannot create SocialAccount');
-        res.status(200).json({ status: true });
-        return;
-      }
-
-      const provider = providerFromUnipile(unipileProvider);
+      const provider = providerFromUnipile(accountType);
 
       const saved = await SocialAccount.findOneAndUpdate(
         { accountId },
@@ -90,7 +57,13 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
         { upsert: true, new: true }
       );
 
-      console.log(`[Unipile Webhook] SocialAccount saved: ${provider} / ${accountId} for user ${userId}`);
+      console.log(`[Unipile Webhook] SocialAccount saved successfully:`, {
+        account_id: accountId,
+        name: userId,
+        account_type: accountType,
+        provider,
+        mongo_id: saved._id
+      });
     }
 
     if (event.type === 'message.received' || event.type === 'new_message') {
@@ -125,11 +98,6 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
         title: notification.title,
         createdAt: notification.created_at
       });
-    }
-
-    if (event.type !== 'account.created' && event.type !== 'account.connected' &&
-        event.type !== 'message.received' && event.type !== 'new_message') {
-      console.log(`[Unipile Webhook] Unhandled event type: "${event.type}"`);
     }
 
     res.status(200).json({ status: true });

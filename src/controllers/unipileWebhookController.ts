@@ -66,7 +66,7 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
       });
     }
 
-    if (event.type === 'message.received' || event.type === 'new_message') {
+    if (event.event === 'message_received') {
       const accountId = event.account_id || event.accountId;
 
       if (!accountId) {

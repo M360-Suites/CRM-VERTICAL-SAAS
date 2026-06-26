@@ -19,6 +19,43 @@ const providerLabel: Record<string, string> = {
   facebook_messenger: 'Facebook Messenger'
 };
 
+const isMessageEvent = (event: Record<string, unknown>): boolean => {
+  const messageEventTypes = ['message_received', 'message', 'messaging', 'inbox_item', 'conversation_message'];
+  return messageEventTypes.includes(event.event as string);
+};
+
+const extractAccountId = (event: Record<string, unknown>): string | undefined => {
+  const id = (event.account_id || event.accountId) as string | undefined;
+  if (id) return id;
+
+  const entry = event.entry as Array<Record<string, unknown>> | undefined;
+  if (entry?.[0]) {
+    return (entry[0].id || entry[0].account_id || entry[0].accountId) as string | undefined;
+  }
+
+  return undefined;
+};
+
+const extractMessageContent = (event: Record<string, unknown>): string | undefined => {
+  const content =
+    (event.content as string) ||
+    (event.text as string) ||
+    (event.body as string) ||
+    (event.message as string) ||
+    (event.text_content as string) ||
+    (event.message_body as string);
+  if (content) return content;
+
+  const entry = event.entry as Array<Record<string, unknown>> | undefined;
+  const messaging = entry?.[0]?.messaging as Array<Record<string, unknown>> | undefined;
+  const message = messaging?.[0]?.message as Record<string, unknown> | undefined;
+  if (message) {
+    return (message.text || message.content || message.body) as string | undefined;
+  }
+
+  return undefined;
+};
+
 export const handleUnipileWebhook = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('WEBHOOK HIT');
@@ -66,8 +103,8 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
       });
     }
 
-    if (event.event === 'message_received') {
-      const accountId = event.account_id || event.accountId;
+    if (isMessageEvent(event)) {
+      const accountId = extractAccountId(event);
 
       if (!accountId) {
         console.warn('[Unipile Webhook] Missing accountId in message event');
@@ -82,14 +119,24 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
         return;
       }
 
+      const sender = event.sender_name || event.from || event.sender || 'Unknown';
+      const content = extractMessageContent(event);
+      const preview = content
+        ? (content.length > 100 ? content.slice(0, 100) + '...' : content)
+        : undefined;
+
       const notification = await Notification.create({
         userId: socialAccount.userId,
         provider: socialAccount.provider,
         type: 'new_message',
-        title: `New ${providerLabel[socialAccount.provider] || socialAccount.provider} Message`,
+        title: preview
+          ? `${sender}: ${preview}`
+          : `New ${providerLabel[socialAccount.provider] || socialAccount.provider} Message from ${sender}`,
         metadata: {
-          sender: event.sender_name || event.from || event.sender || 'Unknown',
-          accountId
+          sender,
+          accountId,
+          content,
+          conversation_id: (event.conversation_id || event.conversationId) as string | undefined,
         }
       });
 

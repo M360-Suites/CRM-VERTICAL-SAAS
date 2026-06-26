@@ -19,40 +19,76 @@ const providerLabel: Record<string, string> = {
   facebook_messenger: 'Facebook Messenger'
 };
 
+const LOG_PREFIX = '[Unipile Debug]';
+
 const isMessageEvent = (event: Record<string, unknown>): boolean => {
+  const eventType = event.event as string;
   const messageEventTypes = ['message_received', 'message', 'messaging', 'inbox_item', 'conversation_message'];
-  return messageEventTypes.includes(event.event as string);
+  const matched = messageEventTypes.includes(eventType);
+  console.log(`${LOG_PREFIX} isMessageEvent check: event.event="${eventType}" matched=${matched}`);
+  return matched;
 };
 
 const extractAccountId = (event: Record<string, unknown>): string | undefined => {
-  const id = (event.account_id || event.accountId) as string | undefined;
-  if (id) return id;
+  const flatId = (event.account_id || event.accountId) as string | undefined;
+  console.log(`${LOG_PREFIX} extractAccountId: flat account_id="${event.account_id}" accountId="${event.accountId}"`);
+
+  if (flatId) {
+    console.log(`${LOG_PREFIX} extractAccountId: found via flat field: "${flatId}"`);
+    return flatId;
+  }
 
   const entry = event.entry as Array<Record<string, unknown>> | undefined;
   if (entry?.[0]) {
-    return (entry[0].id || entry[0].account_id || entry[0].accountId) as string | undefined;
+    const entryId = (entry[0].id || entry[0].account_id || entry[0].accountId) as string | undefined;
+    console.log(`${LOG_PREFIX} extractAccountId: entry[0] fields:`, JSON.stringify(entry[0]));
+    if (entryId) {
+      console.log(`${LOG_PREFIX} extractAccountId: found via entry[0]: "${entryId}"`);
+      return entryId;
+    }
   }
 
+  console.log(`${LOG_PREFIX} extractAccountId: no accountId found in any location`);
   return undefined;
 };
 
 const extractMessageContent = (event: Record<string, unknown>): string | undefined => {
-  const content =
-    (event.content as string) ||
-    (event.text as string) ||
-    (event.body as string) ||
-    (event.message as string) ||
-    (event.text_content as string) ||
-    (event.message_body as string);
-  if (content) return content;
+  const flatChecks = [
+    { field: 'content', value: event.content },
+    { field: 'text', value: event.text },
+    { field: 'body', value: event.body },
+    { field: 'message', value: event.message },
+    { field: 'text_content', value: event.text_content },
+    { field: 'message_body', value: event.message_body },
+  ];
 
-  const entry = event.entry as Array<Record<string, unknown>> | undefined;
-  const messaging = entry?.[0]?.messaging as Array<Record<string, unknown>> | undefined;
-  const message = messaging?.[0]?.message as Record<string, unknown> | undefined;
-  if (message) {
-    return (message.text || message.content || message.body) as string | undefined;
+  console.log(`${LOG_PREFIX} extractMessageContent flat fields:`, JSON.stringify(Object.fromEntries(flatChecks.map(c => [c.field, typeof c.value]))));
+
+  for (const { field, value } of flatChecks) {
+    if (value) {
+      console.log(`${LOG_PREFIX} extractMessageContent: found content in "${field}" (${(value as string).length} chars)`);
+      return value as string;
+    }
   }
 
+  const entry = event.entry as Array<Record<string, unknown>> | undefined;
+  if (entry?.[0]) {
+    console.log(`${LOG_PREFIX} extractMessageContent: checking entry[0].messaging`);
+    const messaging = entry[0].messaging as Array<Record<string, unknown>> | undefined;
+    if (messaging?.[0]) {
+      const message = messaging[0].message as Record<string, unknown> | undefined;
+      if (message) {
+        const text = (message.text || message.content || message.body) as string | undefined;
+        console.log(`${LOG_PREFIX} extractMessageContent: entry[0].messaging[0].message fields:`, JSON.stringify(Object.keys(message)));
+        if (text) {
+          console.log(`${LOG_PREFIX} extractMessageContent: found via nested entry path (${text.length} chars)`);
+          return text;
+        }
+      }
+    }
+  }
+
+  console.log(`${LOG_PREFIX} extractMessageContent: no content found`);
   return undefined;
 };
 
@@ -104,6 +140,8 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
     }
 
     if (isMessageEvent(event)) {
+      console.log(`${LOG_PREFIX} Processing message event, keys:`, Object.keys(event));
+
       const accountId = extractAccountId(event);
 
       if (!accountId) {
@@ -114,16 +152,25 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
 
       const socialAccount = await SocialAccount.findOne({ accountId });
       if (!socialAccount) {
-        console.warn(`[Unipile Webhook] No SocialAccount found for accountId: ${accountId}`);
+        console.warn(`[Unipile Webhook] No SocialAccount found for accountId: "${accountId}" — account may not be connected via Unipile or CREATION_SUCCESS webhook never fired`);
         res.status(200).json({ status: true });
         return;
       }
 
+      console.log(`${LOG_PREFIX} Found SocialAccount: provider="${socialAccount.provider}" userId="${socialAccount.userId}"`);
+
       const sender = event.sender_name || event.from || event.sender || 'Unknown';
+      console.log(`${LOG_PREFIX} Extracted sender: "${sender}" from sender_name="${event.sender_name}" from="${event.from}" sender="${event.sender}"`);
+
       const content = extractMessageContent(event);
+      console.log(`${LOG_PREFIX} Content extracted:`, content ? `"${content.slice(0, 80)}..." (${content.length} chars)` : 'NO CONTENT FOUND');
+
       const preview = content
         ? (content.length > 100 ? content.slice(0, 100) + '...' : content)
         : undefined;
+
+      const convId = (event.conversation_id || event.conversationId) as string | undefined;
+      console.log(`${LOG_PREFIX} conversation_id="${convId}"`);
 
       const notification = await Notification.create({
         userId: socialAccount.userId,
@@ -136,15 +183,19 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
           sender,
           accountId,
           content,
-          conversation_id: (event.conversation_id || event.conversationId) as string | undefined,
+          conversation_id: convId,
         }
       });
+
+      console.log(`${LOG_PREFIX} Notification created: _id="${notification._id}" title="${notification.title}"`);
 
       emitNotification(socialAccount.userId.toString(), {
         provider: socialAccount.provider,
         title: notification.title,
         createdAt: notification.created_at
       });
+
+      console.log(`${LOG_PREFIX} Real-time notification emitted via socket`);
     }
 
     res.status(200).json({ status: true });

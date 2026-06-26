@@ -4,9 +4,15 @@ import { SocialAccount } from '../models/SocialAccount';
 import { generateConnectUrl, disconnectAccount } from '../services/unipileService';
 import config from '../config';
 
-type SocialProvider = 'whatsapp' | 'instagram' | 'facebook_messenger';
+type SocialProvider = 'whatsapp' | 'instagram' | 'facebook';
+type InternalProvider = 'whatsapp' | 'instagram' | 'facebook_messenger';
 
-const PROVIDERS: SocialProvider[] = ['whatsapp', 'instagram', 'facebook_messenger'];
+const PROVIDERS: SocialProvider[] = ['whatsapp', 'instagram', 'facebook'];
+const PROVIDER_MAP: Record<SocialProvider, InternalProvider> = {
+  whatsapp: 'whatsapp',
+  instagram: 'instagram',
+  facebook: 'facebook_messenger'
+};
 
 export const listSocialAccounts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -61,8 +67,10 @@ export const connectSocialAccount = async (req: AuthRequest, res: Response): Pro
       userId
     });
 
+    const internalProvider = PROVIDER_MAP[provider as SocialProvider];
+
     const result = await generateConnectUrl(
-      provider as SocialProvider,
+      internalProvider,
       successRedirectUrl,
       failureRedirectUrl,
       notifyUrl,

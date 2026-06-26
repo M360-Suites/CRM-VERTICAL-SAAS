@@ -28,6 +28,7 @@ import dashboardRoutes from './src/routes/dashboardRoutes';
 import notificationRoutes from './src/routes/notificationRoutes';
 import socialAccountRoutes from './src/routes/socialAccountRoutes';
 import webhookRoutes from './src/routes/webhookRoutes';
+import connectionRoutes from './src/routes/connectionRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { startTaskReminderService } from './src/services/taskReminderService';
 import { initializeSocket } from './src/services/socketService';
@@ -95,6 +96,7 @@ app.use('/api/v1/email', emailSyncRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/social-accounts', socialAccountRoutes);
+app.use('/api/v1/connections', connectionRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 /** Global error handler */

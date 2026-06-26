@@ -52,6 +52,39 @@ const extractAccountId = (event: Record<string, unknown>): string | undefined =>
   return undefined;
 };
 
+const extractSenderName = (event: Record<string, unknown>): string => {
+  const flatName = event.sender_name || event.from || event.sender;
+  if (typeof flatName === 'string') {
+    console.log(`${LOG_PREFIX} extractSenderName: found flat string "${flatName}"`);
+    return flatName;
+  }
+
+  const attendee = event.attendee as Record<string, unknown> | undefined;
+  if (attendee) {
+    const name = (attendee.attendee_name || attendee.name) as string | undefined;
+    if (name) {
+      console.log(`${LOG_PREFIX} extractSenderName: found attendee.attendee_name="${name}"`);
+      return name;
+    }
+    const phone = attendee.attendee_public_identifier as string | undefined;
+    if (phone) {
+      console.log(`${LOG_PREFIX} extractSenderName: fallback to attendee_public_identifier="${phone}"`);
+      return phone;
+    }
+  }
+
+  const entry = event.entry as Array<Record<string, unknown>> | undefined;
+  const messaging = entry?.[0]?.messaging as Array<Record<string, unknown>> | undefined;
+  const sender = messaging?.[0]?.sender as Record<string, unknown> | undefined;
+  if (sender) {
+    console.log(`${LOG_PREFIX} extractSenderName: checking entry[0].messaging[0].sender`);
+    return (sender.name || sender.id || 'Unknown') as string;
+  }
+
+  console.log(`${LOG_PREFIX} extractSenderName: no sender name found, using "Unknown"`);
+  return 'Unknown';
+};
+
 const extractMessageContent = (event: Record<string, unknown>): string | undefined => {
   const flatChecks = [
     { field: 'content', value: event.content },
@@ -159,8 +192,8 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
 
       console.log(`${LOG_PREFIX} Found SocialAccount: provider="${socialAccount.provider}" userId="${socialAccount.userId}"`);
 
-      const sender = event.sender_name || event.from || event.sender || 'Unknown';
-      console.log(`${LOG_PREFIX} Extracted sender: "${sender}" from sender_name="${event.sender_name}" from="${event.from}" sender="${event.sender}"`);
+      const sender = extractSenderName(event);
+      console.log(`${LOG_PREFIX} Extracted sender: "${sender}"`);
 
       const content = extractMessageContent(event);
       console.log(`${LOG_PREFIX} Content extracted:`, content ? `"${content.slice(0, 80)}..." (${content.length} chars)` : 'NO CONTENT FOUND');
@@ -172,6 +205,8 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
       const convId = (event.conversation_id || event.conversationId) as string | undefined;
       console.log(`${LOG_PREFIX} conversation_id="${convId}"`);
 
+      const attendee = event.attendee as Record<string, unknown> | undefined;
+
       const notification = await Notification.create({
         userId: socialAccount.userId,
         provider: socialAccount.provider,
@@ -181,6 +216,7 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
           : `New ${providerLabel[socialAccount.provider] || socialAccount.provider} Message from ${sender}`,
         metadata: {
           sender,
+          attendee: attendee || undefined,
           accountId,
           content,
           conversation_id: convId,

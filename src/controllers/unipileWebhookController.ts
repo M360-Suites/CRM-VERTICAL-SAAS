@@ -53,32 +53,35 @@ const extractAccountId = (event: Record<string, unknown>): string | undefined =>
 };
 
 const extractSenderName = (event: Record<string, unknown>): string => {
-  const flatName = event.sender_name || event.from || event.sender;
-  if (typeof flatName === 'string') {
-    console.log(`${LOG_PREFIX} extractSenderName: found flat string "${flatName}"`);
-    return flatName;
-  }
+  const senderField = event.sender as Record<string, unknown> | undefined;
+  console.log(`${LOG_PREFIX} extractSenderName: typeof sender="${typeof event.sender}"`);
 
-  const attendee = event.attendee as Record<string, unknown> | undefined;
-  if (attendee) {
-    const name = (attendee.attendee_name || attendee.name) as string | undefined;
+  if (typeof senderField === 'object' && senderField !== null) {
+    console.log(`${LOG_PREFIX} extractSenderName: sender object keys:`, Object.keys(senderField));
+    const name = (senderField.attendee_name || senderField.name) as string | undefined;
     if (name) {
-      console.log(`${LOG_PREFIX} extractSenderName: found attendee.attendee_name="${name}"`);
+      console.log(`${LOG_PREFIX} extractSenderName: found sender.attendee_name="${name}"`);
       return name;
     }
-    const phone = attendee.attendee_public_identifier as string | undefined;
+    const phone = senderField.attendee_public_identifier as string | undefined;
     if (phone) {
       console.log(`${LOG_PREFIX} extractSenderName: fallback to attendee_public_identifier="${phone}"`);
       return phone;
     }
   }
 
+  const flatName = event.sender_name || event.from;
+  if (typeof flatName === 'string') {
+    console.log(`${LOG_PREFIX} extractSenderName: found flat string "${flatName}"`);
+    return flatName;
+  }
+
   const entry = event.entry as Array<Record<string, unknown>> | undefined;
   const messaging = entry?.[0]?.messaging as Array<Record<string, unknown>> | undefined;
-  const sender = messaging?.[0]?.sender as Record<string, unknown> | undefined;
-  if (sender) {
+  const fbSender = messaging?.[0]?.sender as Record<string, unknown> | undefined;
+  if (fbSender) {
     console.log(`${LOG_PREFIX} extractSenderName: checking entry[0].messaging[0].sender`);
-    return (sender.name || sender.id || 'Unknown') as string;
+    return (fbSender.name || fbSender.id || 'Unknown') as string;
   }
 
   console.log(`${LOG_PREFIX} extractSenderName: no sender name found, using "Unknown"`);
@@ -205,7 +208,7 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
       const convId = (event.conversation_id || event.conversationId) as string | undefined;
       console.log(`${LOG_PREFIX} conversation_id="${convId}"`);
 
-      const attendee = event.attendee as Record<string, unknown> | undefined;
+      const senderObj = event.sender as Record<string, unknown> | undefined;
 
       const notification = await Notification.create({
         userId: socialAccount.userId,
@@ -216,7 +219,7 @@ export const handleUnipileWebhook = async (req: Request, res: Response): Promise
           : `New ${providerLabel[socialAccount.provider] || socialAccount.provider} Message from ${sender}`,
         metadata: {
           sender,
-          attendee: attendee || undefined,
+          sender_obj: senderObj || undefined,
           accountId,
           content,
           conversation_id: convId,

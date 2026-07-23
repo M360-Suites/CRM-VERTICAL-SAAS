@@ -247,9 +247,16 @@ export const updateTask = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const updateObj: Record<string, unknown> = { ...updateData };
+    const updateObj: Record<string, unknown> = {};
 
-    if (updateData.due_at === null) {
+    if (updateData.title !== undefined) updateObj.title = updateData.title;
+    if (updateData.type !== undefined) updateObj.type = updateData.type;
+    if (updateData.priority !== undefined) updateObj.priority = updateData.priority;
+    if (updateData.status !== undefined) updateObj.status = updateData.status;
+    if (updateData.description !== undefined) updateObj.description = updateData.description;
+    if (updateData.duration_minutes !== undefined) updateObj.duration_minutes = updateData.duration_minutes;
+
+    if (updateData.due_at === null || updateData.due_at === '') {
       updateObj.due_at = null;
       updateObj.reminder_sent_at = null;
     } else if (updateData.due_at) {
@@ -257,16 +264,21 @@ export const updateTask = async (req: AuthRequest, res: Response): Promise<void>
       updateObj.reminder_sent_at = null;
     }
 
-    if (updateData.location === null) {
+    if (updateData.location === null || updateData.location === '') {
       updateObj.location = null;
+    } else if (updateData.location) {
+      updateObj.location = updateData.location;
     }
-    if (updateData.meeting_url === null) {
+
+    if (updateData.meeting_url === null || updateData.meeting_url === '') {
       updateObj.meeting_url = null;
+    } else if (updateData.meeting_url) {
+      updateObj.meeting_url = updateData.meeting_url;
     }
 
     ['contact_id', 'deal_id', 'company_id'].forEach((field) => {
       const value = updateData[field as keyof UpdateTaskBody] as string | null | undefined;
-      if (value === null) {
+      if (value === null || value === '') {
         updateObj[field] = null;
       } else if (value) {
         updateObj[field] = new mongoose.Types.ObjectId(value);
@@ -277,6 +289,14 @@ export const updateTask = async (req: AuthRequest, res: Response): Promise<void>
       updateObj.assignees = updateData.assignees.map(
         (a: string) => new mongoose.Types.ObjectId(a)
       );
+    }
+
+    if (Object.keys(updateObj).length === 0) {
+      res.status(400).json({
+        status: false,
+        message: 'No valid fields provided to update'
+      });
+      return;
     }
 
     const organizationId = requireOrganization(req, res);

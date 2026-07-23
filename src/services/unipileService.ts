@@ -2,7 +2,8 @@ import config from '../config';
 
 type SocialProvider = 'whatsapp' | 'instagram' | 'facebook_messenger';
 
-const BASE_URL = `https://${config.UNIPILE_DSN}/api/v1`;
+const DSN_BASE = `https://${config.UNIPILE_DSN}`;
+const BASE_URL = `${DSN_BASE}/api/v1`;
 
 const headers = () => ({
   'X-API-KEY': config.UNIPILE_API_KEY || '',
@@ -25,7 +26,7 @@ export const generateConnectUrl = async (
   const requestBody = {
     type: 'create',
     providers: [providerMap[provider]],
-    api_url: BASE_URL,
+    api_url: DSN_BASE,
     expiresOn: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     success_redirect_url: successRedirectUrl,
     failure_redirect_url: failureRedirectUrl,
@@ -47,6 +48,12 @@ export const generateConnectUrl = async (
 
   if (!response.ok) {
     const errorBody = await response.text();
+    if (response.status === 503 && errorBody.includes('no_client_session')) {
+      throw new Error(
+        'Unipile service is temporarily unavailable (no active session). ' +
+        'Please verify your API key at https://dashboard.unipile.com and ensure your instance is running.'
+      );
+    }
     throw new Error(`Unipile connect failed: ${response.status} ${errorBody}`);
   }
 

@@ -39,28 +39,53 @@ const getUploadedFiles = (req: AuthRequest): Express.Multer.File[] => {
   ];
 };
 
-const getDocumentExtension = (mimeType: string): '.pdf' | '.docx' => (
-  mimeType === 'application/pdf' ? '.pdf' : '.docx'
-);
+const extensionMap: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/svg+xml': 'svg',
+  'image/tiff': 'tiff',
+  'image/bmp': 'bmp',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/aac': 'aac',
+  'audio/flac': 'flac',
+  'audio/webm': 'webm',
+  'audio/mp4': 'm4a',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+};
 
-const getDocumentResourceType = (mimeType: string): 'image' | 'raw' => (
-  mimeType === 'application/pdf' ? 'image' : 'raw'
-);
+const getDocumentExtension = (mimeType: string): string => {
+  const ext = extensionMap[mimeType];
+  return ext ? `.${ext}` : '';
+};
 
-const getStoredDocumentResourceType = (document: { mime_type: string; cloudinary_url?: string }): 'image' | 'raw' => {
+const getDocumentFormat = (mimeType: string): string => extensionMap[mimeType] || 'raw';
+
+const getCloudinaryResourceType = (mimeType: string): 'image' | 'video' | 'raw' => {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('audio/') || mimeType.startsWith('video/')) return 'video';
+  return 'raw';
+};
+
+const getStoredDocumentResourceType = (document: { mime_type: string; cloudinary_url?: string }): 'image' | 'video' | 'raw' => {
   if (document.cloudinary_url?.includes('/raw/upload/')) return 'raw';
   if (document.cloudinary_url?.includes('/image/upload/')) return 'image';
-  return getDocumentResourceType(document.mime_type);
+  if (document.cloudinary_url?.includes('/video/upload/')) return 'video';
+  return getCloudinaryResourceType(document.mime_type);
 };
 
 const getCloudinaryPublicId = (mimeType: string): string => {
   const baseName = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-  return mimeType === 'application/pdf' ? baseName : `${baseName}${getDocumentExtension(mimeType)}`;
+  const ext = getDocumentExtension(mimeType);
+  return ext ? `${baseName}${ext}` : baseName;
 };
-
-const getDocumentFormat = (mimeType: string): 'pdf' | 'docx' => (
-  mimeType === 'application/pdf' ? 'pdf' : 'docx'
-);
 
 const touchFolder = async (
   folderId: mongoose.Types.ObjectId | string | null | undefined,
@@ -350,7 +375,7 @@ export const uploadDocumentsToFolder = async (req: AuthRequest, res: Response): 
 
     const documents = await Promise.all(files.map(async (file) => {
       const publicId = getCloudinaryPublicId(file.mimetype);
-      const resourceType = getDocumentResourceType(file.mimetype);
+      const resourceType = getCloudinaryResourceType(file.mimetype);
       const result = await cloudinary.uploader.upload(
         `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
         {

@@ -15,7 +15,8 @@ import {
   getCompanyDeals,
   getCompanyStats,
   exportCompanies,
-  bulkImportCompanies
+  bulkImportCompanies,
+  listCompaniesSelect
 } from '../controllers/companyController';
 import { authenticate, authorize } from '../middleware/auth';
 
@@ -107,6 +108,28 @@ router.get('/', listCompanies);
  *         description: File downloaded
  */
 router.get('/export', authorize('admin', 'sales_manager'), exportCompanies);
+
+/**
+ * @swagger
+ * /companies/select:
+ *   get:
+ *     summary: Lightweight company list for dropdowns/autocomplete
+ *     description: Returns companies with only _id and name fields, sorted alphabetically. Supports search by name.
+ *     tags: [Companies]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Filter companies by name (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Companies retrieved successfully
+ */
+router.get('/select', listCompaniesSelect);
 
 /**
  * @swagger

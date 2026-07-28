@@ -30,6 +30,17 @@ export const getIO = (): Server => {
   return io;
 };
 
+export const emitDealStageChanged = (organizationId: string, payload: {
+  deal_id: string;
+  stage_id: string;
+  title: string;
+  userId: string;
+}): void => {
+  if (io) {
+    io.emit('deal:stage_changed', { ...payload, organizationId });
+  }
+};
+
 export const emitNotification = (userId: string, payload: { provider: string; title: string; createdAt: Date }): void => {
   if (io) {
     io.to(`user:${userId}`).emit('notification', payload);

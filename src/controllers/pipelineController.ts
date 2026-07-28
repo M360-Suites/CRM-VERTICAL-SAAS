@@ -7,6 +7,7 @@ import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { User } from '../models/User';
 import { ApiResponse, AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { emitDealStageChanged } from '../services/socketService';
 
 const isValidObjectId = (value: unknown): value is string =>
   typeof value === 'string' && mongoose.Types.ObjectId.isValid(value);
@@ -367,14 +368,43 @@ export const updatePipelineDeal = async (req: AuthRequest, res: Response): Promi
         return;
       }
 
-      const stage = await PipelineStage.exists({ _id: body.stage_id, organization_id: organizationId });
-      if (!stage) {
+      const targetStage = await PipelineStage.findOne({ _id: body.stage_id, organization_id: organizationId }).select('name is_won is_lost').lean();
+      if (!targetStage) {
         res.status(404).json({ message: 'Stage not found' });
         return;
       }
 
+      if (existingDeal.stage_id) {
+        const currentStage = await PipelineStage.findById(existingDeal.stage_id).select('is_won is_lost').lean();
+        if (currentStage?.is_won) {
+          res.status(400).json({ message: 'Cannot move a deal from a Won stage' });
+          return;
+        }
+        if (currentStage?.is_lost) {
+          res.status(400).json({ message: 'Cannot move a deal from a Lost stage' });
+          return;
+        }
+      }
+
       update.stage_id = toObjectId(body.stage_id);
       update.stage_changed_at = new Date();
+      update.status = targetStage.is_won ? 'won' : targetStage.is_lost ? 'lost' : 'open';
+
+      if (req.user?.id) {
+        await Activity.create({
+          deal_id: toObjectId(dealId),
+          type: 'stage_change',
+          content: `Moved to ${targetStage.name}`,
+          user_id: toObjectId(req.user.id),
+          organization_id: organizationId,
+          metadata: {
+            stage_id: body.stage_id,
+            stage_name: targetStage.name,
+            stage_changed_at: update.stage_changed_at,
+            status: update.status
+          }
+        });
+      }
     }
 
     const deal = await Deal.findOneAndUpdate(
@@ -411,9 +441,9 @@ export const movePipelineDealStage = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const [existingDeal, stage] = await Promise.all([
-      Deal.findOne({ _id: dealId, organization_id: organizationId }).select('owner_id').lean(),
-      PipelineStage.findOne({ _id: stage_id, organization_id: organizationId }).select('name').lean()
+    const [existingDeal, targetStage] = await Promise.all([
+      Deal.findOne({ _id: dealId, organization_id: organizationId }).select('owner_id stage_id').lean(),
+      PipelineStage.findOne({ _id: stage_id, organization_id: organizationId }).select('name is_won is_lost').lean()
     ]);
 
     if (!existingDeal) {
@@ -426,35 +456,59 @@ export const movePipelineDealStage = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    if (!stage) {
+    if (!targetStage) {
       res.status(404).json({ message: 'Stage not found' });
       return;
     }
 
+    if (existingDeal.stage_id) {
+      const currentStage = await PipelineStage.findById(existingDeal.stage_id).select('is_won is_lost').lean();
+      if (currentStage?.is_won) {
+        res.status(400).json({ message: 'Cannot move a deal from a Won stage' });
+        return;
+      }
+      if (currentStage?.is_lost) {
+        res.status(400).json({ message: 'Cannot move a deal from a Lost stage' });
+        return;
+      }
+    }
+
     const stageChangedAt = new Date();
-    const deal = await Deal.findOneAndUpdate(
-      { _id: dealId, organization_id: organizationId },
-      {
-        $set: {
-          stage_id: toObjectId(stage_id),
-          stage_changed_at: stageChangedAt
-        }
-      },
-      { new: true }
-    ).populate('company_id', 'name').lean();
+    const status = targetStage.is_won ? 'won' : targetStage.is_lost ? 'lost' : 'open';
+    const updateFields: Record<string, unknown> = {
+      stage_id: toObjectId(stage_id),
+      stage_changed_at: stageChangedAt,
+      status
+    };
 
     await Activity.create({
       deal_id: toObjectId(dealId),
       type: 'stage_change',
-      content: `Moved to ${stage.name}`,
+      content: `Moved to ${targetStage.name}`,
       user_id: req.user?.id ? toObjectId(req.user.id) : undefined,
       organization_id: organizationId,
       metadata: {
         stage_id,
-        stage_name: stage.name,
-        stage_changed_at: stageChangedAt
+        stage_name: targetStage.name,
+        stage_changed_at: stageChangedAt,
+        status
       }
     });
+
+    const deal = await Deal.findOneAndUpdate(
+      { _id: dealId, organization_id: organizationId },
+      { $set: updateFields },
+      { new: true }
+    ).populate('company_id', 'name').lean();
+
+    if (req.user?.id) {
+      emitDealStageChanged(organizationId.toString(), {
+        deal_id: dealId,
+        stage_id,
+        title: deal?.title || '',
+        userId: req.user.id
+      });
+    }
 
     res.json(deal ? formatDeal(deal) : null);
   } catch (error) {

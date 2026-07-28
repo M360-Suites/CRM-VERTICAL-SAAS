@@ -177,6 +177,9 @@ router.delete('/stages/:stageId', authorize('admin', 'sales_manager'), deletePip
  *                 type: string
  *               stage_id:
  *                 type: string
+ *               company_id:
+ *                 type: string
+ *                 description: ID of the company to associate with this deal
  *     responses:
  *       201:
  *         description: Pipeline deal created
@@ -216,6 +219,10 @@ router.post('/deals', authorize('admin', 'sales_manager', 'sales_rep'), createPi
  *                 type: string
  *               stage_id:
  *                 type: string
+ *               company_id:
+ *                 type: string
+ *                 nullable: true
+ *                 description: ID of the company to associate, or null to remove
  *     responses:
  *       200:
  *         description: Pipeline deal updated

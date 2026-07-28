@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import mongoose from 'mongoose';
 import { Activity } from '../models/Activity';
+import { Company } from '../models/Company';
 import { Deal } from '../models/Deal';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { User } from '../models/User';
@@ -249,20 +250,20 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
     const body = req.body as DealBody;
     const title = normalizeName(body.title);
     if (!title) {
-      res.status(400).json({ message: 'title is required' });
+      res.status(400).json({ status: false, message: 'title is required' });
       return;
     }
 
     let stageId: mongoose.Types.ObjectId | null = null;
     if (body.stage_id) {
       if (!isValidObjectId(body.stage_id)) {
-        res.status(400).json({ message: 'Invalid stage_id' });
+        res.status(400).json({ status: false, message: 'Invalid stage_id' });
         return;
       }
 
       const stageExists = await PipelineStage.exists({ _id: body.stage_id, organization_id: organizationId });
       if (!stageExists) {
-        res.status(404).json({ message: 'Stage not found' });
+        res.status(404).json({ status: false, message: 'Stage not found' });
         return;
       }
 
@@ -270,14 +271,22 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
     } else {
       stageId = await getFirstStageId(organizationId);
       if (!stageId) {
-        res.status(404).json({ message: 'No pipeline stage found' });
+        res.status(404).json({ status: false, message: 'No pipeline stage found' });
         return;
       }
     }
 
     if (body.company_id && !isValidObjectId(body.company_id)) {
-      res.status(400).json({ message: 'Invalid company_id' });
+      res.status(400).json({ status: false, message: 'Invalid company_id' });
       return;
+    }
+
+    if (body.company_id) {
+      const companyExists = await Company.exists({ _id: body.company_id, organization_id: organizationId });
+      if (!companyExists) {
+        res.status(404).json({ status: false, message: 'Company not found' });
+        return;
+      }
     }
 
     const deal = await Deal.create({
@@ -293,9 +302,9 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
     });
 
     const populatedDeal = await Deal.findById(deal._id).populate('company_id', 'name').lean();
-    res.status(201).json(populatedDeal ? formatDeal(populatedDeal) : deal);
+    res.status(201).json({ status: true, message: 'Pipeline deal created successfully', data: populatedDeal ? formatDeal(populatedDeal) : deal });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to create pipeline deal' });
+    res.status(500).json({ status: false, message: 'Failed to create pipeline deal' });
   }
 };
 
@@ -341,6 +350,13 @@ export const updatePipelineDeal = async (req: AuthRequest, res: Response): Promi
       if (body.company_id !== null && !isValidObjectId(body.company_id)) {
         res.status(400).json({ message: 'Invalid company_id' });
         return;
+      }
+      if (body.company_id) {
+        const companyExists = await Company.exists({ _id: body.company_id, organization_id: organizationId });
+        if (!companyExists) {
+          res.status(404).json({ message: 'Company not found' });
+          return;
+        }
       }
       update.company_id = body.company_id ? toObjectId(body.company_id) : null;
     }
@@ -453,19 +469,19 @@ export const deletePipelineDeal = async (req: AuthRequest, res: Response): Promi
 
     const { dealId } = req.params as { dealId: string };
     if (!isValidObjectId(dealId)) {
-      res.status(400).json({ message: 'Invalid deal ID' });
+      res.status(400).json({ status: false, message: 'Invalid deal ID' });
       return;
     }
 
     const deal = await Deal.findOneAndDelete({ _id: dealId, organization_id: organizationId });
     if (!deal) {
-      res.status(404).json({ message: 'Deal not found' });
+      res.status(404).json({ status: false, message: 'Deal not found' });
       return;
     }
 
-    res.json({ message: 'Deal deleted successfully' });
+    res.json({ status: true, message: 'Deal deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to delete pipeline deal' });
+    res.status(500).json({ status: false, message: 'Failed to delete pipeline deal' });
   }
 };
 

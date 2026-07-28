@@ -534,6 +534,38 @@ export const getCompanyStats = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
+export const listCompaniesSelect = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { search } = req.query as { search?: string };
+
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const query: Record<string, unknown> = { organization_id: organizationId };
+
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+    }
+
+    const companies = await Company.find(query)
+      .select('name')
+      .sort({ name: 1 })
+      .limit(50)
+      .lean();
+
+    res.json({
+      status: true,
+      message: 'Companies retrieved successfully',
+      data: companies
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: 'Failed to fetch companies'
+    });
+  }
+};
+
 export const exportCompanies = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { format = 'csv' } = req.query;

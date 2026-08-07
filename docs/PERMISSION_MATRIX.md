@@ -102,6 +102,18 @@
 
 > **Note:** Sales Reps can only update/move deals they own (checked by `owner_id`). Admin and Sales Manager can update/move any deal.
 
+### 4.3 Stage Discussion (Internal Chat)
+
+| Feature | Admin | Sales Manager | Sales Rep | Viewer |
+|---------|-------|---------------|-----------|--------|
+| View stage discussion | 👁️* | 👁️* | 🔒 (assigned only) | ❌ |
+| Post a message | ✅* | ✅* | ✅ (assigned only) | ❌ |
+| Edit own message | ✅ | ✅ | ✅ | ❌ |
+| Delete own message | ✅ | ✅ | ✅ | ❌ |
+| Edit/delete any message | ✅ | ✅ | ❌ | ❌ |
+
+> **Note:** A Sales Rep can only view/post in a stage discussion if they are an **assignee of that stage** (checked against `PipelineStage.assignees`). Admin and Sales Manager (*) can view/post in any stage discussion.
+
 ---
 
 ## 5. Tasks

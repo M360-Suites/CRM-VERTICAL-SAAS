@@ -46,3 +46,24 @@ export const emitNotification = (userId: string, payload: { provider: string; ti
     io.to(`user:${userId}`).emit('notification', payload);
   }
 };
+
+export const emitStageMessage = (
+  stageId: string,
+  recipientUserIds: string[],
+  payload: {
+    event: 'created' | 'updated' | 'deleted';
+    organizationId: string;
+    message?: Record<string, unknown>;
+    messageId?: string;
+    senderId?: string;
+    createdAt?: Date;
+  }
+): void => {
+  if (!io) return;
+  const server = io;
+  const data = { stage_id: stageId, ...payload };
+  recipientUserIds.forEach((userId) => {
+    server.to(`user:${userId}`).emit('stage:message', data);
+  });
+  server.to(`stage:${stageId}`).emit('stage:message', data);
+};

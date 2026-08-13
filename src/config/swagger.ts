@@ -711,12 +711,37 @@ const options: swaggerJsdoc.Options = {
           properties: {
             _id: { type: 'string' },
             userId: { type: 'string' },
-            provider: { type: 'string', enum: ['whatsapp', 'instagram', 'facebook_messenger'] },
-            type: { type: 'string', enum: ['new_message', 'connection_request', 'mention'] },
+            provider: { type: 'string', enum: ['whatsapp', 'instagram', 'facebook_messenger', 'internal'] },
+            type: { type: 'string', enum: ['new_message', 'connection_request', 'mention', 'stage_message'] },
             title: { type: 'string', example: 'New WhatsApp Message' },
             metadata: { type: 'object', nullable: true },
             read: { type: 'boolean', default: false },
             created_at: { type: 'string', format: 'date-time' },
+          },
+        },
+        StageMessageSender: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            display_name: { type: 'string' },
+            email: { type: 'string' },
+            avatar_url: { type: 'string', nullable: true },
+          },
+        },
+        StageMessage: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            stage_id: { type: 'string' },
+            content: { type: 'string' },
+            edited: { type: 'boolean', default: false },
+            sender: {
+              $ref: '#/components/schemas/StageMessageSender',
+              nullable: true,
+            },
+            is_owner: { type: 'boolean' },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
           },
         },
         SocialAccount: {

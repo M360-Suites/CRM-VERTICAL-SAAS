@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
+import request from 'supertest';
 
 /**
  * Shared mocks for route-contract tests. Controllers are replaced so each suite

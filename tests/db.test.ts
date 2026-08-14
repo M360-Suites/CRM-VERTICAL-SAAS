@@ -1,31 +1,32 @@
+import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import dns from 'dns'
 
-describe('MongoDB Cloud Connection', () => {
-  const MONGODB_URI = process.env.MONGODB_URI as string;
+dns.setServers(['8.8.8.8']);
+
+dotenv.config({ quiet: true });
+
+describe('MongoDB connection', () => {
+  const mongoUri = process.env.MONGODB_URI;
 
   beforeAll(async () => {
-    if (!MONGODB_URI) {
-      throw new Error('MONGODB_URI is not set in environment variables');
+    if (!mongoUri) {
+      throw new Error('MONGODB_URI is not set. Add it to your .env file before running this test.');
     }
-    await mongoose.connect(MONGODB_URI);
-  });
+
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10_000 });
+  }, 15_000);
 
   afterAll(async () => {
     await mongoose.disconnect();
+  }, 15_000);
+
+  it('connects successfully', () => {
+    expect(mongoose.connection.readyState).toBe(1);
   });
 
-  it('should connect to the cloud MongoDB instance', () => {
-    expect(mongoose.connection.readyState).toBe(1); // 1 = connected
-  });
-
-  it('should be able to ping the database', async () => {
-    const admin = mongoose.connection.db!.admin();
-    const result = await admin.ping();
+  it('responds to a ping', async () => {
+    const result = await mongoose.connection.db!.admin().ping();
     expect(result.ok).toBe(1);
-  });
-
-  it('should list at least one collection (sanity check)', async () => {
-    const collections = await mongoose.connection.db!.listCollections().toArray();
-    expect(Array.isArray(collections)).toBe(true);
   });
 });

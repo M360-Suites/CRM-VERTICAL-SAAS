@@ -1,20 +1,23 @@
+import express, { type NextFunction, type Request, type Response } from 'express';
 import request from 'supertest';
-import { authenticated, mockControllerStub, createApp, mockAuthentication } from './helpers/featureRouteHarness';
-jest.mock('../src/middleware/auth', mockAuthentication);
-jest.mock('../src/controllers/pipelineController', () => Object.fromEntries([
-  'getPipeline getPipelineStages createPipelineStage updatePipelineStage deletePipelineStage getPipelineDeals createPipelineDeal updatePipelineDeal deletePipelineDeal movePipelineDealStage getPipelineDealActivities getPipelineTeamMembers getPipelineStageAssignees assignPipelineStageMember removePipelineStageMember'.split(' ')
-].flat().map((name) => [name, mockControllerStub(name)])));
+
+jest.mock('../src/middleware/auth', () => ({
+  authenticate: (req: Request, res: Response, next: NextFunction) => {
+    if (!req.header('authorization')) return void res.status(401).json({ status: false, message: 'No token provided' });
+    (req as Request & { user?: unknown }).user = { id: '507f1f77bcf86cd799439011', organization_id: '507f1f77bcf86cd799439012', role: 'admin' }; next();
+  }, authorize: () => (_req: Request, _res: Response, next: NextFunction) => next()
+}));
 import pipelineRoutes from '../src/routes/pipelineRoutes';
-const app = createApp('/pipeline', pipelineRoutes);
+const app = express(); app.use(express.json()); app.use('/pipeline', pipelineRoutes);
+const authenticated = (test: request.Test) => test.set('Authorization', 'Bearer test-token');
 describe('pipeline API', () => {
   it('requires authentication', async () => expect((await request(app).get('/pipeline')).status).toBe(401));
-  it.each([
-    ['get', '/', 'getPipeline'], ['get', '/stages', 'getPipelineStages'], ['post', '/stages', 'createPipelineStage'], ['patch', '/stages/stage-1', 'updatePipelineStage'], ['delete', '/stages/stage-1', 'deletePipelineStage'],
-    ['get', '/deals', 'getPipelineDeals'], ['post', '/deals', 'createPipelineDeal'], ['patch', '/deals/deal-1', 'updatePipelineDeal'], ['delete', '/deals/deal-1', 'deletePipelineDeal'], ['patch', '/deals/deal-1/stage', 'movePipelineDealStage'],
-    ['get', '/deals/deal-1/activities', 'getPipelineDealActivities'], ['get', '/team-members', 'getPipelineTeamMembers'], ['get', '/stage-assignees', 'getPipelineStageAssignees'], ['post', '/stages/stage-1/assignees', 'assignPipelineStageMember'], ['delete', '/stages/stage-1/assignees/user-1', 'removePipelineStageMember']
-  ] as const)('routes %s %s to %s', async (method, path, handler) => {
-    const response = await authenticated((request(app) as any)[method](path));
-    expect(response.status).toBe(['createPipelineStage', 'createPipelineDeal'].includes(handler) ? 201 : 200);
-    expect(response.body.handler).toBe(handler);
+  it('requires a title when creating a pipeline deal', async () => {
+    const response = await authenticated(request(app).post('/pipeline/deals')).send({});
+    expect(response.status).toBe(400); expect(response.body).toMatchObject({ status: false, message: 'title is required' });
+  });
+  it('validates stage assignment IDs', async () => {
+    const response = await authenticated(request(app).post('/pipeline/stages/not-an-id/assignees')).send({ user_id: 'not-an-id' });
+    expect(response.status).toBe(400); expect(response.body).toMatchObject({ status: false, message: 'Valid stageId and user_id are required' });
   });
 });

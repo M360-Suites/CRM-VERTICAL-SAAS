@@ -1,9 +1,21 @@
 import request from 'supertest';
-import { authenticated, mockControllerStub, createApp, mockAuthentication } from './helpers/featureRouteHarness';
-jest.mock('../src/middleware/auth', mockAuthentication);
-jest.mock('../src/controllers/analyticsController', () => Object.fromEntries('getAnalytics getAnalyticsSummary getAnalyticsPipelineByStage getAnalyticsLeadSources getAnalyticsTeamProductivity getAnalyticsTaskSummary'.split(' ').map((name) => [name, mockControllerStub(name)])));
-jest.mock('../src/controllers/reportsController', () => Object.fromEntries('getReports getReportsSummary getReportsPipelineByStage getReportsDealSourceMix getReportsContactTemperature exportReports'.split(' ').map((name) => [name, mockControllerStub(name)])));
-jest.mock('../src/controllers/dashboardController', () => Object.fromEntries('getDashboardSummary getSalesReport getTaskReport getActivityReport exportDashboardReport'.split(' ').map((name) => [name, mockControllerStub(name)])));
+import { authenticated, createApp } from './helpers/featureRouteHarness';
+jest.mock('../src/middleware/auth', () => {
+  const { mockAuthentication } = require('./helpers/featureRouteHarness');
+  return mockAuthentication();
+});
+jest.mock('../src/controllers/analyticsController', () => {
+  const { mockControllerStub } = require('./helpers/featureRouteHarness');
+  return Object.fromEntries('getAnalytics getAnalyticsSummary getAnalyticsPipelineByStage getAnalyticsLeadSources getAnalyticsTeamProductivity getAnalyticsTaskSummary'.split(' ').map((name) => [name, mockControllerStub(name)]));
+});
+jest.mock('../src/controllers/reportsController', () => {
+  const { mockControllerStub } = require('./helpers/featureRouteHarness');
+  return Object.fromEntries('getReports getReportsSummary getReportsPipelineByStage getReportsDealSourceMix getReportsContactTemperature exportReports'.split(' ').map((name) => [name, mockControllerStub(name)]));
+});
+jest.mock('../src/controllers/dashboardController', () => {
+  const { mockControllerStub } = require('./helpers/featureRouteHarness');
+  return Object.fromEntries('getDashboardSummary getSalesReport getTaskReport getActivityReport exportDashboardReport'.split(' ').map((name) => [name, mockControllerStub(name)]));
+});
 import analyticsRoutes from '../src/routes/analyticsRoutes'; import reportsRoutes from '../src/routes/reportsRoutes'; import dashboardRoutes from '../src/routes/dashboardRoutes';
 const app = expressApp(); function expressApp() { const app = createApp('/analytics', analyticsRoutes); app.use('/reports', reportsRoutes); app.use('/dashboard', dashboardRoutes); return app; }
 describe('analytics, reports, and dashboard APIs', () => {

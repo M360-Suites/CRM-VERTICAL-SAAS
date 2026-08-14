@@ -22,7 +22,7 @@ const uploadOptions: MulterOptions = {
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024, files: 10 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const allowed = [
+    const allowedMime = [
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -34,16 +34,33 @@ const uploadOptions: MulterOptions = {
       'image/tiff',
       'image/bmp',
       'audio/mpeg',
+      'audio/mp3',
       'audio/wav',
+      'audio/wave',
+      'audio/x-wav',
       'audio/ogg',
       'audio/aac',
       'audio/flac',
       'audio/webm',
       'audio/mp4',
+      'audio/m4a',
+      'audio/x-m4a',
+      'audio/aiff',
+      'audio/x-aiff',
+      'audio/wma',
+      'audio/x-ms-wma',
+      'audio/x-msvideo',
+      'audio/mid',
+      'audio/x-midi',
       'text/plain',
       'text/csv'
     ];
-    cb(null, allowed.includes(file.mimetype));
+
+    const allowedExt = /\.(pdf|doc|docx|jpg|jpeg|png|gif|webp|svg|tiff|tif|bmp|mp3|wav|ogg|oga|aac|flac|webm|m4a|mp4|aiff|aif|wma|mid|midi|txt|csv)$/i;
+
+    const mimeOk = allowedMime.includes(file.mimetype);
+    const extOk = allowedExt.test(file.originalname);
+    cb(null, mimeOk || extOk);
   }
 };
 

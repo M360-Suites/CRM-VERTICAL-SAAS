@@ -46,6 +46,7 @@ jest.mock('../src/models/StageMessage', () => ({ StageMessage: stageMessageModel
 jest.mock('../src/models/Pipeline', () => ({ PipelineStage: pipelineStageModel }));
 jest.mock('../src/models/Notification', () => ({ Notification: notificationModel }));
 jest.mock('../src/services/socketService', () => ({ emitStageMessage: jest.fn() }));
+jest.mock('../src/utils/email', () => ({ sendStageCommentEmail: jest.fn() }));
 
 import stageMessageRoutes from '../src/routes/stageMessageRoutes';
 

@@ -4,7 +4,9 @@
  */
 import mongoose from 'mongoose';
 import config from './index';
+import dns from 'dns'
 
+dns.setServers(['8.8.8.8']);
 /**
  * Establishes connection to MongoDB database
  * @throws Exits process with code 1 if connection fails

@@ -148,4 +148,30 @@ export const sendUserInvitationEmail = async (
   });
 };
 
+export const sendStageCommentEmail = async (
+  recipients: Array<{ address: string; name: string }>,
+  input: {
+    senderName: string;
+    stageName: string;
+    content: string;
+    discussionUrl?: string;
+  }
+): Promise<void> => {
+  const preview =
+    input.content.length > 200 ? input.content.slice(0, 200) + '...' : input.content;
+
+  await sendMail({
+    subject: `${input.senderName} commented in ${input.stageName}`,
+    message: `
+      <h2>New comment in stage discuss</h2>
+      <p><strong>${escapeHtml(input.senderName)}</strong> left a comment in <strong>${escapeHtml(input.stageName)}</strong>:</p>
+      <blockquote style="border-left: 4px solid #cbd5e1; margin: 12px 0; padding: 8px 16px; color: #334155;">${escapeHtml(preview)}</blockquote>
+      ${input.discussionUrl ? `<p><a href="${escapeHtml(input.discussionUrl)}">View the discussion</a></p>` : ''}
+      <p style="color: #64748b; font-size: 13px;">You are receiving this because you are part of this pipeline stage.</p>
+    `,
+    mailType: 'html',
+    recipients
+  });
+};
+
 export { sendMail };

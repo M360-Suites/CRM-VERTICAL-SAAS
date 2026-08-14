@@ -19,20 +19,49 @@ type StageMapValue = {
   is_lost: boolean;
 };
 
-const parseDateRange = (req: AuthRequest): DateRange => {
-  const fromRaw = req.query.from as string | undefined;
-  const toRaw = req.query.to as string | undefined;
-  const from = fromRaw ? new Date(fromRaw) : undefined;
-  const to = toRaw ? new Date(toRaw) : undefined;
+type Timeframe = 'daily' | 'weekly' | 'monthly';
 
-  if (to && !Number.isNaN(to.getTime())) {
-    to.setHours(23, 59, 59, 999);
+const getTimeframeFrom = (timeframe: Timeframe): Date => {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (timeframe === 'daily') return startOfDay;
+
+  if (timeframe === 'weekly') {
+    const daysSinceMonday = (now.getDay() + 6) % 7;
+    return new Date(startOfDay.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
   }
 
-  return {
-    from: from && !Number.isNaN(from.getTime()) ? from : undefined,
-    to: to && !Number.isNaN(to.getTime()) ? to : undefined
-  };
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+};
+
+const isTimeframe = (value: string | undefined): value is Timeframe =>
+  value === 'daily' || value === 'weekly' || value === 'monthly';
+
+const parseDateRange = (req: AuthRequest): DateRange => {
+  let range: DateRange = {};
+
+  if (isTimeframe(req.query.timeframe as string)) {
+    range = { from: getTimeframeFrom(req.query.timeframe as Timeframe), to: new Date() };
+  }
+
+  const fromRaw = req.query.from as string | undefined;
+  const toRaw = req.query.to as string | undefined;
+
+  if (fromRaw) {
+    const from = new Date(fromRaw);
+    if (!Number.isNaN(from.getTime())) range.from = from;
+  }
+
+  if (toRaw) {
+    const to = new Date(toRaw);
+    if (!Number.isNaN(to.getTime())) {
+      to.setHours(23, 59, 59, 999);
+      range.to = to;
+    }
+  }
+
+  return range;
 };
 
 const dateFilter = (field: string, range: DateRange): Record<string, unknown> => {

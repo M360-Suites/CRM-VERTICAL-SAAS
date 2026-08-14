@@ -8,9 +8,11 @@ import mongoose from 'mongoose';
 import { StageMessage } from '../models/StageMessage';
 import { PipelineStage } from '../models/Pipeline';
 import { Notification } from '../models/Notification';
+import { User } from '../models/User';
 import { AuthRequest, ApiResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { emitStageMessage } from '../services/socketService';
+import { sendStageCommentEmail } from '../utils/email';
 
 const MAX_CONTENT_LENGTH = 5000;
 
@@ -189,6 +191,7 @@ export const createStageMessage = async (req: AuthRequest, res: Response): Promi
 
     const recipients = assigneeIds.filter((id) => id !== req.user?.id);
     const preview = content.length > 100 ? content.slice(0, 100) + '...' : content;
+    const senderName = req.user!.display_name || req.user!.email;
 
     await Notification.create(
       recipients.map((userId) => ({
@@ -200,11 +203,39 @@ export const createStageMessage = async (req: AuthRequest, res: Response): Promi
           stage_id: stageId,
           stage_name: stageName,
           message_id: message._id.toString(),
-          sender_name: req.user!.display_name || req.user!.email,
+          sender_name: senderName,
           preview
         }
       }))
     );
+
+    if (recipients.length > 0) {
+      void (async () => {
+        try {
+          const users = await User.find({ _id: { $in: recipients }, is_active: true })
+            .select('email display_name')
+            .lean();
+
+          const emailRecipients = users.map((user) => ({
+            address: user.email,
+            name: user.display_name || ''
+          }));
+
+          if (emailRecipients.length > 0) {
+            await sendStageCommentEmail(emailRecipients, {
+              senderName,
+              stageName: stageName || 'a stage',
+              content,
+              discussionUrl: process.env.FRONTEND_URL
+                ? `${process.env.FRONTEND_URL}/pipeline/stages/${stageId}`
+                : undefined
+            });
+          }
+        } catch (emailError) {
+          console.error('Failed to send stage comment email notification:', emailError);
+        }
+      })();
+    }
 
     emitStageMessage(stageId, recipients, {
       event: 'created',

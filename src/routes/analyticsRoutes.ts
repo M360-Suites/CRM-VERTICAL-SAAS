@@ -31,15 +31,23 @@ router.use(authenticate);
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *         description: Shortcut time range. daily = today, weekly = this week (from Monday), monthly = this month.
+ *       - in: query
  *         name: from
  *         schema:
  *           type: string
  *           format: date
+ *         description: Start date (overrides timeframe).
  *       - in: query
  *         name: to
  *         schema:
  *           type: string
  *           format: date
+ *         description: End date (overrides timeframe).
  *     responses:
  *       200:
  *         description: Analytics board data
@@ -55,6 +63,22 @@ router.get('/', getAnalytics);
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
  *     responses:
  *       200:
  *         description: Analytics summary
@@ -70,6 +94,22 @@ router.get('/summary', getAnalyticsSummary);
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
  *     responses:
  *       200:
  *         description: Pipeline analytics by stage
@@ -85,6 +125,22 @@ router.get('/pipeline-by-stage', getAnalyticsPipelineByStage);
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
  *     responses:
  *       200:
  *         description: Lead sources
@@ -100,6 +156,22 @@ router.get('/lead-sources', getAnalyticsLeadSources);
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
  *     responses:
  *       200:
  *         description: Team productivity
@@ -115,6 +187,22 @@ router.get('/team-productivity', getAnalyticsTeamProductivity);
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
  *     responses:
  *       200:
  *         description: Task summary

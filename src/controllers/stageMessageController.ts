@@ -227,7 +227,7 @@ export const createStageMessage = async (req: AuthRequest, res: Response): Promi
               stageName: stageName || 'a stage',
               content,
               discussionUrl: process.env.FRONTEND_URL
-                ? `${process.env.FRONTEND_URL}/pipeline/stages/${stageId}`
+                ? `${process.env.FRONTEND_URL}pipeline?stageId=${stageId}`
                 : undefined
             });
           }

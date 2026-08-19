@@ -5,7 +5,7 @@
     "moduleResolution": "bundler", // ← add this explicitly
     "target": "esnext",
     "lib": ["esnext"],
-    "types": ["node"],
+    "types": ["node", "jest"],
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
@@ -20,6 +20,6 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "server.ts"],
+  "include": ["src/**/*", "server.ts", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }

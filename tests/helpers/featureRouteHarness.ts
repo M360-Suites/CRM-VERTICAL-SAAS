@@ -23,11 +23,11 @@ export const mockAuthentication = () => ({
   }
 });
 
-export const mockControllerStub = (name: string) => jest.fn((_req: Request, res: Response) =>
+export const mockControllerStub = (name: string): jest.Mock => jest.fn((_req: Request, res: Response) =>
   res.status(name.startsWith('create') ? 201 : 200).json({ status: true, handler: name })
 );
 
-export const createApp = (path: string, router: express.Router) => {
+export const createApp = (path: string, router: express.Router): express.Express => {
   const app = express();
   app.use(express.json());
   app.use(path, router);

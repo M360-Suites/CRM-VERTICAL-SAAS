@@ -8,5 +8,13 @@ module.exports = {
     '^.+\\.ts$': ['ts-jest', { diagnostics: false }]
   },
   clearMocks: true,
-  testPathIgnorePatterns: ['/node_modules/', '/dist/']
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  coverageThreshold: {
+    global: {
+      branches: 15,
+      functions: 30,
+      lines: 35,
+      statements: 35
+    }
+  }
 };

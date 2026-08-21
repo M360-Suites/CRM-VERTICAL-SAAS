@@ -1,6 +1,7 @@
 import { Router, type Router as RouterType } from 'express';
 import {
   getAnalytics,
+  getAnalyticsAiBreakdown,
   getAnalyticsLeadSources,
   getAnalyticsPipelineByStage,
   getAnalyticsSummary,
@@ -208,5 +209,39 @@ router.get('/team-productivity', getAnalyticsTeamProductivity);
  *         description: Task summary
  */
 router.get('/task-summary', getAnalyticsTaskSummary);
+
+/**
+ * @swagger
+ * /analytics/ai-breakdown:
+ *   get:
+ *     summary: Get an AI-written plain-English breakdown of all company analytics
+ *     tags: [Analytics]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly]
+ *         description: Shortcut time range. daily = today, weekly = this week (from Monday), monthly = this month.
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (overrides timeframe).
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (overrides timeframe).
+ *     responses:
+ *       200:
+ *         description: AI-written analytics breakdown
+ */
+router.get('/ai-breakdown', getAnalyticsAiBreakdown);
 
 export default router;

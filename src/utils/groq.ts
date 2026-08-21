@@ -268,6 +268,61 @@ const buildUserPrompt = (input: EmailGenerationInput): string => {
   return `${contextBlock}\n\n${input.recipient_name ? `Recipient name: ${input.recipient_name}` : ''}\n${input.sender_name ? `Sender name: ${input.sender_name}` : ''}`.trim();
 };
 
+export interface AnalyticsBreakdownInput {
+  organization_name?: string;
+  range_label: string;
+  analytics: unknown;
+}
+
+const getAnalyticsSystemPrompt = (): string => `You are a business analyst for a CRM system. You receive raw analytics data about a company's sales performance and write a clear breakdown for people without a technical or analytics background.
+
+RULES:
+- Use ONLY numbers and facts from the provided data. Never invent, estimate, or extrapolate figures.
+- Briefly explain what each key metric means in simple words (e.g. "win rate is how many deals you closed compared to how many you lost").
+- Write short sections with a plain heading followed by 2-4 sentences or a few dash bullets.
+- Cover: overall performance (revenue, pipeline value, win rate), where deals stand (pipeline by stage), where leads come from (lead sources), how the team is doing (team productivity and task summary), and end with a short "What this means" section naming the biggest strength and the biggest risk.
+- Keep the tone friendly and direct. Avoid jargon; if you must use a term, explain it immediately.
+- Amounts are in the currency recorded on each deal.
+- Do not use markdown code blocks, tables, or HTML. Plain text headings and dashes for bullets only.`;
+
+const buildAnalyticsUserPrompt = (input: AnalyticsBreakdownInput): string => `COMPANY: ${input.organization_name || 'Unknown'}
+PERIOD: ${input.range_label}
+
+ANALYTICS DATA (JSON):
+${JSON.stringify(input.analytics)}
+
+Write the breakdown for the people at this company who want to understand how the business is doing.`;
+
+export const generateAnalyticsBreakdown = async (input: AnalyticsBreakdownInput): Promise<string> => {
+  const response = await fetch(GROQ_RESPONSES_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.GROQ_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: config.GROQ_MODEL,
+      instructions: getAnalyticsSystemPrompt(),
+      input: buildAnalyticsUserPrompt(input),
+      temperature: 0.4
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq analytics breakdown failed with status ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json() as GroqResponsesApiResponse;
+  const text = getResponseText(data);
+
+  if (!text) {
+    throw new Error('Groq analytics breakdown returned an empty response');
+  }
+
+  return normalizeGeneratedText(text);
+};
+
 export const generateEmail = async (input: EmailGenerationInput): Promise<EmailResult> => {
   const response = await fetch(GROQ_RESPONSES_URL, {
     method: 'POST',

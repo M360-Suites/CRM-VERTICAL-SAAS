@@ -2,11 +2,13 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import { Contact } from '../models/Contact';
 import { Deal } from '../models/Deal';
+import { Organization } from '../models/Organization';
 import { PipelineStage } from '../models/Pipeline';
 import { Task } from '../models/Task';
 import { User } from '../models/User';
 import { AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { generateAnalyticsBreakdown } from '../utils/groq';
 
 type DateRange = {
   from?: Date;
@@ -384,5 +386,56 @@ export const getAnalyticsTaskSummary = async (req: AuthRequest, res: Response): 
     });
   } catch (error) {
     res.status(500).json({ status: false, message: 'Failed to fetch task summary' });
+  }
+};
+
+const formatDateOnly = (date: Date): string => date.toISOString().slice(0, 10);
+
+const describeDateRange = (range: DateRange): string => {
+  if (range.from && range.to) return `${formatDateOnly(range.from)} to ${formatDateOnly(range.to)}`;
+  if (range.from) return `from ${formatDateOnly(range.from)}`;
+  if (range.to) return `up to ${formatDateOnly(range.to)}`;
+  return 'all time';
+};
+
+export const getAnalyticsAiBreakdown = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const range = parseDateRange(req);
+    const [summary, pipelineByStage, leadSources, teamProductivity, taskSummary, organization] = await Promise.all([
+      getSummary(organizationId, range),
+      getPipelineByStage(organizationId, range),
+      getLeadSources(organizationId, range),
+      getTeamProductivity(organizationId, range),
+      getTaskSummary(organizationId, range),
+      Organization.findById(organizationId).select('name').lean()
+    ]);
+
+    const breakdown = await generateAnalyticsBreakdown({
+      organization_name: organization?.name,
+      range_label: describeDateRange(range),
+      analytics: {
+        summary,
+        pipeline_by_stage: pipelineByStage,
+        lead_sources: leadSources,
+        team_productivity: teamProductivity,
+        task_summary: taskSummary
+      }
+    });
+
+    res.json({
+      status: true,
+      message: 'AI analytics breakdown generated successfully',
+      data: {
+        breakdown,
+        period: describeDateRange(range),
+        generated_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('AI analytics breakdown error:', error);
+    res.status(500).json({ status: false, message: 'Failed to generate AI analytics breakdown' });
   }
 };

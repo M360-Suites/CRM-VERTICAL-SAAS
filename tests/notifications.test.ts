@@ -41,12 +41,12 @@ describe('notifications API', () => {
         skip: jest.fn().mockReturnValue({ limit: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([{ _id: 'notification-1', read: false }]) }) })
       })
     });
-    notificationModel.countDocuments.mockResolvedValue(1);
+    notificationModel.countDocuments.mockResolvedValueOnce(1).mockResolvedValueOnce(1);
 
     const response = await authenticated(request(app).get('/notifications?page=2&limit=10'));
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ status: true, data: { total: 1, page: 2, limit: 10, total_pages: 1 } });
+    expect(response.body).toMatchObject({ status: true, data: { unread_count: 1, total: 1, page: 2, limit: 10, total_pages: 1 } });
     expect(notificationModel.find).toHaveBeenCalledWith({ userId });
   });
 

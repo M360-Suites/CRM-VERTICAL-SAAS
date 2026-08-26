@@ -15,13 +15,14 @@ export const listNotifications = async (req: AuthRequest, res: Response): Promis
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
 
-    const [notifications, total] = await Promise.all([
+    const [notifications, total, unreadCount] = await Promise.all([
       Notification.find({ userId })
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Notification.countDocuments({ userId })
+      Notification.countDocuments({ userId }),
+      Notification.countDocuments({ userId, read: false })
     ]);
 
     res.json({
@@ -29,6 +30,7 @@ export const listNotifications = async (req: AuthRequest, res: Response): Promis
       message: 'Notifications retrieved successfully',
       data: {
         data: notifications,
+        unread_count: unreadCount,
         total,
         page,
         limit,

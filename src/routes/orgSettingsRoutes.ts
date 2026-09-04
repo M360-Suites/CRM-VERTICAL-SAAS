@@ -3,7 +3,8 @@ import { authenticate, authorize } from '../middleware/auth';
 import {
   getApiKeys,
   regeneratePublicKey,
-  regenerateSecretKey
+  regenerateSecretKey,
+  revokeKey
 } from '../controllers/orgSettingsController';
 
 const router: RouterType = Router();
@@ -64,5 +65,38 @@ router.post('/api-keys/regenerate-public', authorize('admin', 'sales_manager'), 
  *         description: Forbidden
  */
 router.post('/api-keys/regenerate-secret', authorize('admin'), regenerateSecretKey);
+
+/**
+ * @swagger
+ * /api/v1/org/api-keys/revoke:
+ *   post:
+ *     tags: [Organization]
+ *     summary: Revoke an API key
+ *     description: Permanently disables a public or secret API key. Existing script tags / consumers using it immediately stop working. Use the regenerate endpoints for a replacement key.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [type]
+ *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [public, secret]
+ *                 description: Which key to revoke
+ *     responses:
+ *       200:
+ *         description: Key revoked
+ *       400:
+ *         description: Invalid type
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+router.post('/api-keys/revoke', authorize('admin'), revokeKey);
 
 export default router;

@@ -13,6 +13,7 @@ import { sendEmailVerificationOTP, sendOTPEmail } from '../utils/email';
 import { seedDefaultPipelineForOrganization } from '../seeds/pipelineSeed';
 import { requireOrganization } from '../utils/tenant';
 import { ensureUserOrganization, makeOrganizationSlug } from '../utils/organization';
+import { generateApiKeys } from '../utils/apiKeys';
 import { getFrontendUrl } from '../utils/frontend';
 
 const COOKIE_NAMES = {
@@ -174,7 +175,8 @@ export const signup = async (req: AuthRequest, res: Response): Promise<void> => 
     const role: UserRole = 'admin';
     const organization = await Organization.create({
       name: normalizedCompanyName,
-      slug: `${makeOrganizationSlug(normalizedCompanyName)}-${crypto.randomBytes(3).toString('hex')}`
+      slug: `${makeOrganizationSlug(normalizedCompanyName)}-${crypto.randomBytes(3).toString('hex')}`,
+      ...generateApiKeys()
     });
 
     const user = new User({
@@ -614,7 +616,8 @@ export const googleCallback = async (req: AuthRequest, res: Response): Promise<v
       const role: UserRole = 'admin';
       const organization = await Organization.create({
         name: displayName,
-        slug: `${makeOrganizationSlug(displayName)}-${crypto.randomBytes(3).toString('hex')}`
+        slug: `${makeOrganizationSlug(displayName)}-${crypto.randomBytes(3).toString('hex')}`,
+        ...generateApiKeys()
       });
 
       user = new User({

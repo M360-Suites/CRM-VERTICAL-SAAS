@@ -52,3 +52,23 @@ export const authRateLimit = (req: Request, res: Response, next: NextFunction): 
   bucket.count += 1;
   next();
 };
+
+export const publicLeadRateLimit = (req: Request, res: Response, next: NextFunction): void => {
+  const key = `public-lead:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+  const now = Date.now();
+  const bucket = buckets.get(key);
+
+  if (!bucket || bucket.resetAt <= now) {
+    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    next();
+    return;
+  }
+
+  if (bucket.count >= 100) {
+    res.status(429).json({ status: false, message: 'Too many requests. Please try again later.' });
+    return;
+  }
+
+  bucket.count += 1;
+  next();
+};

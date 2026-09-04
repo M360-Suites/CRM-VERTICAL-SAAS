@@ -1,0 +1,119 @@
+import { Response } from 'express';
+import { AuthRequest } from '../types';
+import { Organization } from '../models/Organization';
+import { generateApiKeys } from '../utils/apiKeys';
+import { requireOrganization } from '../utils/tenant';
+
+/**
+ * Get the current organization's API keys (public key + secret key)
+ * Secret key is only returned to the authenticated admin
+ */
+export const getApiKeys = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const organization = await Organization.findById(organizationId)
+      .select('publicKey secretKey')
+      .lean();
+
+    if (!organization) {
+      res.status(404).json({
+        status: false,
+        message: 'Organization not found'
+      });
+      return;
+    }
+
+    res.json({
+      status: true,
+      message: 'API keys retrieved successfully',
+      data: {
+        publicKey: organization.publicKey || null,
+        secretKey: organization.secretKey || null
+      }
+    });
+  } catch (error) {
+    console.error('Get API keys error:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Failed to retrieve API keys'
+    });
+  }
+};
+
+/**
+ * Regenerate the public API key
+ * This invalidates all existing script tags immediately
+ */
+export const regeneratePublicKey = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const organization = await Organization.findById(organizationId);
+    if (!organization) {
+      res.status(404).json({
+        status: false,
+        message: 'Organization not found'
+      });
+      return;
+    }
+
+    const newPublicKey = generateApiKeys().publicKey;
+    organization.publicKey = newPublicKey;
+    await organization.save();
+
+    res.json({
+      status: true,
+      message: 'Public key regenerated. Update your script tag immediately.',
+      data: {
+        publicKey: newPublicKey
+      }
+    });
+  } catch (error) {
+    console.error('Regenerate public key error:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Failed to regenerate public key'
+    });
+  }
+};
+
+/**
+ * Regenerate the secret API key (admin only)
+ * This invalidates all existing secret-key consumers immediately
+ */
+export const regenerateSecretKey = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const organization = await Organization.findById(organizationId);
+    if (!organization) {
+      res.status(404).json({
+        status: false,
+        message: 'Organization not found'
+      });
+      return;
+    }
+
+    const newSecretKey = generateApiKeys().secretKey;
+    organization.secretKey = newSecretKey;
+    await organization.save();
+
+    res.json({
+      status: true,
+      message: 'Secret key regenerated.',
+      data: {
+        secretKey: newSecretKey
+      }
+    });
+  } catch (error) {
+    console.error('Regenerate secret key error:', error);
+    res.status(500).json({
+      status: false,
+      message: 'Failed to regenerate secret key'
+    });
+  }
+};

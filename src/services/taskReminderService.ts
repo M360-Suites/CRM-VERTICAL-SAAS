@@ -1,5 +1,6 @@
 import { Task, ITask } from '../models/Task';
 import { sendTaskReminderEmail } from '../utils/email';
+import { logger } from '../config/logger';
 
 type ReminderUser = {
   email?: string;
@@ -88,7 +89,7 @@ export const sendUpcomingTaskReminders = async (): Promise<void> => {
       );
     }
   } catch (error) {
-    console.error('Failed to send task reminders:', error);
+    logger.error({ err: error }, 'Failed to send task reminders');
   } finally {
     isRunning = false;
   }
@@ -96,7 +97,7 @@ export const sendUpcomingTaskReminders = async (): Promise<void> => {
 
 export const startTaskReminderService = (): void => {
   if (process.env.TASK_REMINDERS_ENABLED === 'false') {
-    console.log('Task reminder service disabled');
+    logger.info('Task reminder service disabled');
     return;
   }
 
@@ -112,5 +113,5 @@ export const startTaskReminderService = (): void => {
     void sendUpcomingTaskReminders();
   }, intervalMinutes * 60 * 1000);
 
-  console.log(`Task reminder service started; checking every ${intervalMinutes} minutes`);
+  logger.info(`Task reminder service started; checking every ${intervalMinutes} minutes`);
 };

@@ -17,6 +17,7 @@ const required = [
 ] as const;
 for (const key of required) {
   if (!process.env[key]) {
+    // eslint-disable-next-line no-console
     console.error(`Missing environment variable: ${key}`);
     process.exit(1);
   }

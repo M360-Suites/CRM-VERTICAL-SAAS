@@ -3,6 +3,7 @@
  * Express server for Customer Relationship Management system
  */
 import config from './src/config';
+import { logger, httpLogger } from './src/config/logger';
 import path from 'path';
 import http from 'http';
 import express, { Request, Response, NextFunction } from 'express';
@@ -48,6 +49,7 @@ type RequestParseError = Error & {
 };
 
 app.set('trust proxy', 1);
+app.use(httpLogger);
 app.use(securityHeaders);
 app.use(rateLimit);
 
@@ -114,7 +116,7 @@ app.use((err: RequestParseError, req: Request, res: Response, next: NextFunction
     });
   }
 
-  console.error(err.stack);
+  logger.error({ err }, err.message);
   res.status(500).json({
     status: false,
     message: 'Something went wrong'
@@ -133,10 +135,10 @@ const startServer = async () => {
     initializeSocket(httpServer);
 
     httpServer.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      logger.info(`Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error({ err: error }, 'Failed to start server');
     process.exit(1);
   }
 };

@@ -4,6 +4,7 @@
  */
 import mongoose from 'mongoose';
 import config from './index';
+import { logger } from './logger';
 import dns from 'dns'
 
 dns.setServers(['8.8.8.8']);
@@ -14,9 +15,9 @@ dns.setServers(['8.8.8.8']);
 const connectDB = async (): Promise<void> => {
   try {
     await mongoose.connect(config.MONGODB_URI);
-    console.log('MongoDB connected successfully');
+    logger.info('MongoDB connected successfully');
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    logger.error({ err: error }, 'MongoDB connection error');
     process.exit(1);
   }
 };

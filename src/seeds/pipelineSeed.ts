@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { Organization } from '../models/Organization';
+import { logger } from '../config/logger';
 
 const DEFAULT_STAGES = [
   { name: 'Lead', order: 1, is_won: false, is_lost: false },
@@ -41,9 +42,9 @@ export const seedPipeline = async (): Promise<void> => {
       seedDefaultPipelineForOrganization(organization._id as mongoose.Types.ObjectId)
     ));
 
-    console.log('Default pipelines checked successfully');
+    logger.info('Default pipelines checked successfully');
   } catch (error) {
-    console.error('Error seeding pipeline:', error);
+    logger.error({ err: error }, 'Error seeding pipeline');
   }
 };
 
@@ -53,5 +54,5 @@ if (require.main === module) {
   mongoose.connect(mongoUri)
     .then(() => seedPipeline())
     .then(() => mongoose.disconnect())
-    .catch(console.error);
+    .catch((error) => logger.error({ err: error }, 'Pipeline seed failed'));
 }

@@ -71,6 +71,11 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 app.use(cors({
+  origin: config.ORIGIN ? config.ORIGIN.split(',').map((origin) => origin.trim()) : false,
+  credentials: true
+}));
+
+app.use('/api/v1/public/leads', cors({
   origin: true,
   credentials: true
 }));

@@ -323,6 +323,79 @@ export const generateAnalyticsBreakdown = async (input: AnalyticsBreakdownInput)
   return normalizeGeneratedText(text);
 };
 
+interface GenerateLeadTitleInput {
+  message?: string;
+  first_name?: string;
+  last_name?: string;
+  company?: string;
+  source?: string;
+}
+
+const getLeadTitleSystemPrompt = (): string => `You are a CRM assistant. You help generate concise, actionable deal/lead titles for a sales pipeline.
+RULES:
+- The title should be short (max 8 words) and clearly describe what this lead is about.
+- Base the title primarily on the prospect's message/request. If there is no message, base it on the prospect's name/company.
+- Never invent facts not provided. Do not wrap the answer in quotes, markdown, or extra text.
+- Return ONLY the title as a single line of plain text.`;
+
+const buildLeadTitleUserPrompt = (input: GenerateLeadTitleInput): string => {
+  const lines = [
+    input.message ? `Message from prospect: ${input.message}` : '',
+    input.first_name || input.last_name ? `Prospect name: ${[input.first_name, input.last_name].filter(Boolean).join(' ')}` : '',
+    input.company ? `Company: ${input.company}` : '',
+    input.source ? `Source: ${input.source}` : ''
+  ].filter(Boolean).join('\n');
+  return lines || 'Generate a generic sales lead title.';
+};
+
+/**
+ * Generate a concise deal title for a captured lead using Groq AI.
+ * Falls back to a name-based title if no message is provided or AI fails.
+ */
+export const generateLeadTitle = async (input: GenerateLeadTitleInput): Promise<string> => {
+  const fallback = [input.first_name, input.last_name].filter(Boolean).join(' ') || 'New Lead';
+
+  if (!input.message?.trim()) {
+    return fallback;
+  }
+
+  try {
+    const response = await fetch(GROQ_RESPONSES_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.GROQ_MODEL,
+        instructions: getLeadTitleSystemPrompt(),
+        input: buildLeadTitleUserPrompt(input),
+        temperature: 0.4
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq lead title generation failed with status ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json() as GroqResponsesApiResponse;
+    const text = getResponseText(data);
+
+    if (!text) {
+      throw new Error('Groq lead title generation returned an empty response');
+    }
+
+    const cleaned = normalizeGeneratedText(text)
+      .replace(/^["'\s]+|["'\s]+$/g, '')
+      .slice(0, 120);
+
+    return cleaned || fallback;
+  } catch (error) {
+    return `${fallback} - Web Lead`;
+  }
+};
+
 export const generateEmail = async (input: EmailGenerationInput): Promise<EmailResult> => {
   const response = await fetch(GROQ_RESPONSES_URL, {
     method: 'POST',

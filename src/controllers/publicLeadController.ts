@@ -1,5 +1,9 @@
 import { Response } from 'express';
 import { Contact } from '../models/Contact';
+import { Deal } from '../models/Deal';
+import { Pipeline, PipelineStage } from '../models/Pipeline';
+import { generateLeadTitle } from '../utils/groq';
+import { logger } from '../config/logger';
 import { PublicKeyRequest } from '../middleware/publicAuth';
 
 interface LeadCaptureBody {
@@ -12,6 +16,8 @@ interface LeadCaptureBody {
   source?: string;
   temperature?: 'hot' | 'warm' | 'cold';
 }
+
+const LEAD_STAGE_NAME = 'Lead';
 
 /**
  * Create a lead from a public form submission (script tag / embed)
@@ -57,6 +63,39 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       tags: ['web-capture', source || 'script-tag']
     });
 
+    const dealTitle = await generateLeadTitle({
+      message,
+      first_name,
+      last_name,
+      company,
+      source
+    });
+
+    let deal = null;
+    try {
+      const defaultPipeline = await Pipeline.findOne({ organization_id: organization._id, is_default: true }).lean();
+      const leadStage = defaultPipeline
+        ? await PipelineStage.findOne({
+            organization_id: organization._id,
+            pipeline_id: defaultPipeline._id,
+            name: LEAD_STAGE_NAME
+          }).lean()
+        : null;
+
+      deal = await Deal.create({
+        title: dealTitle,
+        status: 'open',
+        contact_id: contact._id,
+        organization_id: organization._id,
+        company_id: undefined,
+        source: source || 'web-capture',
+        stage_id: leadStage?._id,
+        stage_changed_at: new Date()
+      });
+    } catch (dealError) {
+      logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
+    }
+
     res.status(201).json({
       status: true,
       message: 'Lead captured successfully',
@@ -64,11 +103,13 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         id: contact._id,
         first_name: contact.first_name,
         last_name: contact.last_name,
-        email: contact.email
+        email: contact.email,
+        deal_id: deal?._id ?? null,
+        deal_title: dealTitle
       }
     });
   } catch (error) {
-    console.error('Lead capture error:', error);
+    logger.error({ err: error }, 'Lead capture error');
     res.status(500).json({
       status: false,
       message: 'Failed to capture lead'

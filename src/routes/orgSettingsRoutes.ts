@@ -13,7 +13,7 @@ router.use(authenticate);
 
 /**
  * @swagger
- * /api/v1/org/api-keys:
+ * /org/api-keys:
  *   get:
  *     tags: [Organization]
  *     summary: Get organization API keys
@@ -30,7 +30,7 @@ router.get('/api-keys', getApiKeys);
 
 /**
  * @swagger
- * /api/v1/org/api-keys/regenerate-public:
+ * /org/api-keys/regenerate-public:
  *   post:
  *     tags: [Organization]
  *     summary: Regenerate public API key
@@ -49,7 +49,7 @@ router.post('/api-keys/regenerate-public', authorize('admin', 'sales_manager'), 
 
 /**
  * @swagger
- * /api/v1/org/api-keys/regenerate-secret:
+ * /org/api-keys/regenerate-secret:
  *   post:
  *     tags: [Organization]
  *     summary: Regenerate secret API key
@@ -68,7 +68,7 @@ router.post('/api-keys/regenerate-secret', authorize('admin'), regenerateSecretK
 
 /**
  * @swagger
- * /api/v1/org/api-keys/revoke:
+ * /org/api-keys/revoke:
  *   post:
  *     tags: [Organization]
  *     summary: Revoke an API key

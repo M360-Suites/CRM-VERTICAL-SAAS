@@ -7,7 +7,7 @@ const router: RouterType = Router();
 
 /**
  * @swagger
- * /api/v1/public/leads/inbound:
+ * /public/leads/inbound:
  *   post:
  *     tags: [Public]
  *     summary: Capture a lead from script tag

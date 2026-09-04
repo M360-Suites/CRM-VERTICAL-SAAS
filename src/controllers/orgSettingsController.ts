@@ -66,7 +66,7 @@ export const regeneratePublicKey = async (req: AuthRequest, res: Response): Prom
 
     res.json({
       status: true,
-      message: 'Public key regenerated. Update your script tag immediately.',
+      message: 'Public key regenerated. stupid boy .',
       data: {
         publicKey: newPublicKey
       }

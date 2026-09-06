@@ -19,6 +19,7 @@ export interface IDeal extends Document {
   stage_id?: mongoose.Types.ObjectId;
   source?: string;
   industry?: string;
+  description?: string;
   company_id?: mongoose.Types.ObjectId;
   contact_id?: mongoose.Types.ObjectId;
   owner_id?: mongoose.Types.ObjectId;
@@ -46,6 +47,7 @@ const DealSchema = new Schema<IDeal>(
     stage_id: { type: Schema.Types.ObjectId, ref: 'PipelineStage' },
     source: { type: String },
     industry: { type: String },
+    description: { type: String },
     company_id: { type: Schema.Types.ObjectId, ref: 'Company' },
     contact_id: { type: Schema.Types.ObjectId, ref: 'Contact' },
     owner_id: { type: Schema.Types.ObjectId, ref: 'User' },

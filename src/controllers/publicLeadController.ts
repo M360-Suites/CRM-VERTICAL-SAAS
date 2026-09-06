@@ -89,6 +89,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         organization_id: organization._id,
         company_id: undefined,
         source: source || 'web-capture',
+        description: message,
         stage_id: leadStage?._id,
         stage_changed_at: new Date()
       });

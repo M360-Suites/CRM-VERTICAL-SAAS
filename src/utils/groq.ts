@@ -45,6 +45,7 @@ export interface EmailResult {
 type GroqResponsesApiResponse = {
   output_text?: string;
   output?: Array<{
+    type?: string;
     content?: Array<{
       text?: string;
       type?: string;
@@ -241,16 +242,21 @@ const normalizeGeneratedText = (text: string): string => text
   .trim();
 
 const getResponseText = (data: GroqResponsesApiResponse): string => {
+  const messageText = data.output
+    ?.filter((item) => item.type === 'message')
+    .flatMap((item) => item.content || [])
+    .map((content) => content.text)
+    .filter((text): text is string => typeof text === 'string' && text.trim().length > 0)
+    .join('\n')
+    .trim();
+
+  if (messageText) return messageText;
+
   if (typeof data.output_text === 'string' && data.output_text.trim()) {
     return data.output_text.trim();
   }
 
-  return data.output
-    ?.flatMap((item) => item.content || [])
-    .map((content) => content.text)
-    .filter((text): text is string => typeof text === 'string' && text.trim().length > 0)
-    .join('\n')
-    .trim() || '';
+  return '';
 };
 
 const buildUserPrompt = (input: EmailGenerationInput): string => {
@@ -293,6 +299,18 @@ ${JSON.stringify(input.analytics)}
 
 Write the breakdown for the people at this company who want to understand how the business is doing.`;
 
+/**
+ * Reasoning models sometimes leak their chain-of-thought ahead of the answer.
+ * The real report reliably begins with the "Overall Performance" heading that is
+ * immediately followed by a dash bullet, whereas the leaked reasoning only lists
+ * the headings. Slicing from that anchor drops any reasoning preamble.
+ */
+const stripReportPreamble = (text: string): string => {
+  const anchor = /\bOverall\s+Performance\b[^\n]*\n\s*-/i;
+  const match = anchor.exec(text);
+  return match ? text.slice(match.index).trim() : text;
+};
+
 export const generateAnalyticsBreakdown = async (input: AnalyticsBreakdownInput): Promise<string> => {
   const response = await fetch(GROQ_RESPONSES_URL, {
     method: 'POST',
@@ -314,13 +332,13 @@ export const generateAnalyticsBreakdown = async (input: AnalyticsBreakdownInput)
   }
 
   const data = await response.json() as GroqResponsesApiResponse;
-  const text = getResponseText(data);
+  const text = stripReportPreamble(getResponseText(data));
 
   if (!text) {
     throw new Error('Groq analytics breakdown returned an empty response');
   }
 
-  return normalizeGeneratedText(text);
+  return normalizeGeneratedText(text).replace(/[ \t]*[\]]$/, '').trim();
 };
 
 interface GenerateLeadTitleInput {
@@ -331,12 +349,23 @@ interface GenerateLeadTitleInput {
   source?: string;
 }
 
-const getLeadTitleSystemPrompt = (): string => `You are a CRM assistant. You help generate concise, actionable deal/lead titles for a sales pipeline.
+const getLeadTitleSystemPrompt = (): string => `You are a CRM assistant that writes concise deal/lead titles for a sales pipeline.
+
+INPUT: You receive details about a prospect — usually a message they left on a website form.
+
+OUTPUT: ONE short title (max 8 words) describing what this lead is about.
+
 RULES:
-- The title should be short (max 8 words) and clearly describe what this lead is about.
-- Base the title primarily on the prospect's message/request. If there is no message, base it on the prospect's name/company.
-- Never invent facts not provided. Do not wrap the answer in quotes, markdown, or extra text.
-- Return ONLY the title as a single line of plain text.`;
+- Use the prospect's own words from the message whenever possible.
+- If there is no message, base the title on the prospect's name and company.
+- Never invent facts not provided.
+- Respond with the title only. No prefixes, no quotes, no markdown, no newlines, no explanation.
+
+EXAMPLE INPUT:
+Message from prospect: Interested in com
+
+EXAMPLE OUTPUT:
+Interested in com`;
 
 const buildLeadTitleUserPrompt = (input: GenerateLeadTitleInput): string => {
   const lines = [
@@ -348,12 +377,46 @@ const buildLeadTitleUserPrompt = (input: GenerateLeadTitleInput): string => {
   return lines || 'Generate a generic sales lead title.';
 };
 
+const LEAD_TITLE_INVALID_PATTERNS = [
+  /we need to/i,
+  /prospect (says|message|request)/i,
+  /concise title/i,
+  /generate/i,
+  /you can now/i,
+  /continue with/i,
+  /8 words/i,
+  /return (only|just|the)/i,
+  /^\s*you are/i
+];
+
+const isValidLeadTitle = (title: string): boolean => {
+  if (!title.trim()) return false;
+  if (title.includes('\n')) return false;
+  if (title.split(/\s+/).filter(Boolean).length > 12) return false;
+  return !LEAD_TITLE_INVALID_PATTERNS.some((pattern) => pattern.test(title));
+};
+
+const buildFallbackLeadTitle = (input: GenerateLeadTitleInput): string => {
+  const namePart = [input.first_name, input.last_name].filter(Boolean).join(' ').trim();
+  const messagePart = input.message?.trim();
+
+  if (messagePart) {
+    const compact = messagePart.replace(/\s+/g, ' ').slice(0, 80);
+    return namePart ? `${compact} - ${namePart}` : compact;
+  }
+
+  if (namePart) return namePart;
+  if (input.company?.trim()) return input.company.trim();
+  return 'New Lead';
+};
+
 /**
  * Generate a concise deal title for a captured lead using Groq AI.
- * Falls back to a name-based title if no message is provided or AI fails.
+ * Falls back to a deterministic, context-based title if the AI response is
+ * invalid, empty, or the call fails.
  */
 export const generateLeadTitle = async (input: GenerateLeadTitleInput): Promise<string> => {
-  const fallback = [input.first_name, input.last_name].filter(Boolean).join(' ') || 'New Lead';
+  const fallback = buildFallbackLeadTitle(input);
 
   if (!input.message?.trim()) {
     return fallback;
@@ -370,7 +433,8 @@ export const generateLeadTitle = async (input: GenerateLeadTitleInput): Promise<
         model: config.GROQ_MODEL,
         instructions: getLeadTitleSystemPrompt(),
         input: buildLeadTitleUserPrompt(input),
-        temperature: 0.4
+        temperature: 0.3,
+        max_output_tokens: 64
       })
     });
 
@@ -388,12 +452,16 @@ export const generateLeadTitle = async (input: GenerateLeadTitleInput): Promise<
 
     const cleaned = normalizeGeneratedText(text)
       .replace(/^["'\s]+|["'\s]+$/g, '')
-      .slice(0, 120);
+      .trim();
 
-    return cleaned || fallback;
+    if (isValidLeadTitle(cleaned)) {
+      return cleaned.slice(0, 120);
+    }
   } catch (error) {
-    return `${fallback} - Web Lead`;
+    // Swallow and fall back to a deterministic title below
   }
+
+  return fallback;
 };
 
 export const generateEmail = async (input: EmailGenerationInput): Promise<EmailResult> => {

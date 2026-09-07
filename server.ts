@@ -35,6 +35,7 @@ import publicLeadRoutes from './src/routes/publicLeadRoutes';
 import orgSettingsRoutes from './src/routes/orgSettingsRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { startTaskReminderService } from './src/services/taskReminderService';
+import { startStaleDealReminderService } from './src/services/staleDealReminderService';
 import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
 
@@ -142,6 +143,7 @@ const startServer = async () => {
     await connectDB();
     await seedPipeline();
     startTaskReminderService();
+    startStaleDealReminderService();
     initializeSocket(httpServer);
 
     httpServer.listen(PORT, () => {

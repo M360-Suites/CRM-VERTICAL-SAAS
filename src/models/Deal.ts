@@ -25,6 +25,8 @@ export interface IDeal extends Document {
   owner_id?: mongoose.Types.ObjectId;
   organization_id: mongoose.Types.ObjectId;
   stage_changed_at?: Date;
+  stale_reminder_sent_at?: Date;
+  stale_reminder_escalated_at?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -52,7 +54,9 @@ const DealSchema = new Schema<IDeal>(
     contact_id: { type: Schema.Types.ObjectId, ref: 'Contact' },
     owner_id: { type: Schema.Types.ObjectId, ref: 'User' },
     organization_id: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
-    stage_changed_at: { type: Date }
+    stage_changed_at: { type: Date },
+    stale_reminder_sent_at: { type: Date },
+    stale_reminder_escalated_at: { type: Date }
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

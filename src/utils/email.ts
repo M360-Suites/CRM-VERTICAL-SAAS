@@ -175,3 +175,34 @@ export const sendStageCommentEmail = async (
 };
 
 export { sendMail };
+
+export const sendStaleLeadReminderEmail = async (
+  recipients: Array<{ address: string; name: string }>,
+  input: {
+    dealTitle: string;
+    stageName: string;
+    daysInStage: number;
+    contactName?: string;
+    companyName?: string;
+    escalation?: boolean;
+  }
+): Promise<void> => {
+  const suffix = input.escalation ? 'still stuck (5+ days)' : 'needs follow-up (2+ days)';
+  const leadLine = [input.contactName, input.companyName]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(' - ');
+
+  await sendMail({
+    subject: `${input.dealTitle} has been in ${input.stageName} for ${input.daysInStage}+ days`,
+    message: `
+      <h2>Deal ${suffix}</h2>
+      <p>The deal <strong>${escapeHtml(input.dealTitle)}</strong> has been in the <strong>${escapeHtml(input.stageName)}</strong> stage for <strong>${escapeHtml(String(input.daysInStage))}+ days</strong>.</p>
+      ${leadLine ? `<p>Lead: ${escapeHtml(leadLine)}</p>` : ''}
+      <p>Please review this deal and either move it forward in the pipeline or follow up with the prospect.</p>
+      <p style="color: #64748b; font-size: 13px;">You are receiving this because you are assigned to this pipeline stage or are an organization admin.</p>
+    `,
+    mailType: 'html',
+    recipients
+  });
+};

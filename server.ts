@@ -77,7 +77,7 @@ app.use(cors({
 
 app.use('/api/v1/public/leads', cors({
   origin: true,
-  credentials: true
+  // credentials: true
 }));
 
 if (config.SWAGGER_ENABLED) {

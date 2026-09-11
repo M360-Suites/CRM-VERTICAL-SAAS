@@ -26,7 +26,7 @@ const router: RouterType = Router();
  *                 example: pk_live_abc123...
  *               name:
  *                 type: string
- *                 description: Full name (split into first_name/last_name automatically)
+ *                 description: Full name (also accepts full_name, fullname, "full name" - auto-split into first/last)
  *               first_name:
  *                 type: string
  *               last_name:

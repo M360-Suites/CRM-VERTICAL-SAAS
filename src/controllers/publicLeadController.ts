@@ -8,6 +8,8 @@ import { PublicKeyRequest } from '../middleware/publicAuth';
 
 interface LeadCaptureBody {
   name?: string;
+  full_name?: string;
+  fullname?: string;
   first_name?: string;
   last_name?: string;
   email?: string;
@@ -16,6 +18,7 @@ interface LeadCaptureBody {
   message?: string;
   source?: string;
   temperature?: 'hot' | 'warm' | 'cold';
+  [key: string]: unknown;
 }
 
 const LEAD_STAGE_NAME = 'Lead';
@@ -35,22 +38,32 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       return;
     }
 
-    const {
-      name,
-      first_name,
-      last_name,
-      email,
-      phone,
-      company,
-      message,
-      source,
-      temperature
-    }: LeadCaptureBody = req.body;
+    const body = req.body;
 
-    if (!name && !first_name && !last_name && !email && !phone) {
+    const first_name = body.first_name;
+    const last_name = body.last_name;
+    const email = body.email;
+    const phone = body.phone;
+    const company = body.company;
+    const message = body.message;
+    const source = body.source;
+    const temperature = body.temperature;
+
+    const fullNameCandidate =
+      body.name ||
+      body.full_name ||
+      body.fullname ||
+      body['full name'] ||
+      body['FullName'] ||
+      body['Name'] ||
+      body['FULL_NAME'] ||
+      body['FULLNAME'] ||
+      body['FULL NAME'];
+
+    if (!fullNameCandidate && !first_name && !last_name && !email && !phone) {
       res.status(400).json({
         status: false,
-        message: 'At least one of name, first_name, last_name, email, or phone is required'
+        message: 'At least one of name/full_name/fullname, first_name, last_name, email, or phone is required'
       });
       return;
     }
@@ -58,8 +71,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     let resolvedFirstName = first_name;
     let resolvedLastName = last_name;
 
-    if (!resolvedFirstName && !resolvedLastName && name) {
-      const nameParts = name.trim().split(/\s+/);
+    if (!resolvedFirstName && !resolvedLastName && fullNameCandidate) {
+      const nameParts = String(fullNameCandidate).trim().split(/\s+/);
       resolvedFirstName = nameParts[0] || 'Unknown';
       resolvedLastName = nameParts.slice(1).join(' ') || 'Lead';
     }

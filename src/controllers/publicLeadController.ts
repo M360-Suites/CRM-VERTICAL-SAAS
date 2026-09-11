@@ -40,27 +40,52 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
 
     const body = req.body;
 
-    const first_name = body.first_name;
-    const last_name = body.last_name;
-    const email = body.email;
-    const phone = body.phone;
-    const company = body.company;
-    const message = body.message;
-    const source = body.source;
-    const temperature = body.temperature;
+    logger.info({ body: JSON.stringify(body) }, 'Public lead capture — received body');
 
-    const fullNameCandidate =
-      body.name ||
-      body.full_name ||
-      body.fullname ||
-      body['full name'] ||
-      body['FullName'] ||
-      body['Name'] ||
-      body['FULL_NAME'] ||
-      body['FULLNAME'] ||
-      body['FULL NAME'];
+    const pick = <T>(...keys: string[]): T | undefined => {
+      for (const key of keys) {
+        const value = (body as Record<string, unknown>)[key];
+        if (value !== undefined && value !== null && value !== '') return value as T;
+      }
+      return undefined;
+    };
 
-    if (!fullNameCandidate && !first_name && !last_name && !email && !phone) {
+    const email = pick<string>('email');
+    const phone = pick<string>('phone');
+    const company = pick<string>('company');
+    const message = pick<string>('message');
+    const source = pick<string>('source');
+    const temperature = pick<'hot' | 'warm' | 'cold'>('temperature');
+
+    let first_name = pick<string>('first_name', 'firstname', 'firstName', 'first', 'First Name');
+    let last_name = pick<string>('last_name', 'lastname', 'lastName', 'last', 'Last Name');
+
+    if (!first_name || !last_name) {
+      const fullNameCandidate = pick<string>(
+        'name',
+        'full_name',
+        'fullname',
+        'fullName',
+        'full name',
+        'FullName',
+        'Name',
+        'FULL_NAME',
+        'FULLNAME',
+        'FULL NAME'
+      );
+
+      logger.info({ fullNameCandidate, first_name, last_name }, 'Public lead capture — resolved name fields');
+
+      if (fullNameCandidate) {
+        const nameParts = String(fullNameCandidate).trim().split(/\s+/);
+        if (!first_name) first_name = nameParts[0];
+        if (!last_name) last_name = nameParts.slice(1).join(' ') || 'Lead';
+      }
+    } else {
+      logger.info({ first_name, last_name }, 'Public lead capture — explicit first/last received');
+    }
+
+    if (!first_name && !last_name && !email && !phone) {
       res.status(400).json({
         status: false,
         message: 'At least one of name/full_name/fullname, first_name, last_name, email, or phone is required'
@@ -68,18 +93,9 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       return;
     }
 
-    let resolvedFirstName = first_name;
-    let resolvedLastName = last_name;
-
-    if (!resolvedFirstName && !resolvedLastName && fullNameCandidate) {
-      const nameParts = String(fullNameCandidate).trim().split(/\s+/);
-      resolvedFirstName = nameParts[0] || 'Unknown';
-      resolvedLastName = nameParts.slice(1).join(' ') || 'Lead';
-    }
-
     const contact = await Contact.create({
-      first_name: resolvedFirstName || 'Unknown',
-      last_name: resolvedLastName || 'Lead',
+      first_name: first_name || 'Unknown',
+      last_name: last_name || 'Lead',
       email,
       phone,
       organization_id: organization._id,
@@ -89,8 +105,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
 
     const dealTitle = await generateLeadTitle({
       message,
-      first_name: resolvedFirstName,
-      last_name: resolvedLastName,
+      first_name,
+      last_name,
       company,
       source
     });

@@ -24,6 +24,9 @@ const router: RouterType = Router();
  *                 type: string
  *                 description: Public API key (pk_live_*)
  *                 example: pk_live_abc123...
+ *               name:
+ *                 type: string
+ *                 description: Full name (split into first_name/last_name automatically)
  *               first_name:
  *                 type: string
  *               last_name:

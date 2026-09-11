@@ -7,6 +7,7 @@ import { logger } from '../config/logger';
 import { PublicKeyRequest } from '../middleware/publicAuth';
 
 interface LeadCaptureBody {
+  name?: string;
   first_name?: string;
   last_name?: string;
   email?: string;
@@ -35,6 +36,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     }
 
     const {
+      name,
       first_name,
       last_name,
       email,
@@ -45,17 +47,26 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       temperature
     }: LeadCaptureBody = req.body;
 
-    if (!first_name && !last_name && !email && !phone) {
+    if (!name && !first_name && !last_name && !email && !phone) {
       res.status(400).json({
         status: false,
-        message: 'At least one of first_name, last_name, email, or phone is required'
+        message: 'At least one of name, first_name, last_name, email, or phone is required'
       });
       return;
     }
 
+    let resolvedFirstName = first_name;
+    let resolvedLastName = last_name;
+
+    if (!resolvedFirstName && !resolvedLastName && name) {
+      const nameParts = name.trim().split(/\s+/);
+      resolvedFirstName = nameParts[0] || 'Unknown';
+      resolvedLastName = nameParts.slice(1).join(' ') || 'Lead';
+    }
+
     const contact = await Contact.create({
-      first_name: first_name || 'Unknown',
-      last_name: last_name || 'Lead',
+      first_name: resolvedFirstName || 'Unknown',
+      last_name: resolvedLastName || 'Lead',
       email,
       phone,
       organization_id: organization._id,
@@ -65,8 +76,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
 
     const dealTitle = await generateLeadTitle({
       message,
-      first_name,
-      last_name,
+      first_name: resolvedFirstName,
+      last_name: resolvedLastName,
       company,
       source
     });

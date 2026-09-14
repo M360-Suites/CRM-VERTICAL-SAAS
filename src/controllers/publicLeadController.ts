@@ -18,6 +18,7 @@ interface LeadCaptureBody {
   message?: string;
   source?: string;
   temperature?: 'hot' | 'warm' | 'cold';
+  tags?: string | string[];
   [key: string]: unknown;
 }
 
@@ -56,6 +57,13 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     const message = pick<string>('message');
     const source = pick<string>('source');
     const temperature = pick<'hot' | 'warm' | 'cold'>('temperature');
+    const rawTags = pick<string | string[]>('tags');
+
+    const customTags = Array.isArray(rawTags)
+      ? rawTags
+      : rawTags
+        ? String(rawTags).split(',').map((tag) => tag.trim()).filter(Boolean)
+        : [];
 
     let first_name = pick<string>('first_name', 'firstname', 'firstName', 'first', 'First Name');
     let last_name = pick<string>('last_name', 'lastname', 'lastName', 'last', 'Last Name');
@@ -100,7 +108,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       phone,
       organization_id: organization._id,
       temperature: temperature || 'warm',
-      tags: ['web-capture', source || 'script-tag']
+      tags: [...new Set(['web-capture', source || 'script-tag', ...customTags])]
     });
 
     const dealTitle = await generateLeadTitle({

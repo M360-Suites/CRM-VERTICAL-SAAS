@@ -33,6 +33,8 @@ import webhookRoutes from './src/routes/webhookRoutes';
 import connectionRoutes from './src/routes/connectionRoutes';
 import publicLeadRoutes from './src/routes/publicLeadRoutes';
 import orgSettingsRoutes from './src/routes/orgSettingsRoutes';
+import siteRoutes from './src/routes/siteRoutes';
+import publicSiteRoutes from './src/routes/publicSiteRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { startTaskReminderService } from './src/services/taskReminderService';
 import { startStaleDealReminderService } from './src/services/staleDealReminderService';
@@ -77,6 +79,11 @@ app.use('/api/v1/public/leads', cors({
   origin: true,
 }));
 
+/** CORS — public site endpoints (script-tag / embed self-reporting) */
+app.use('/api/v1/public/sites', cors({
+  origin: true,
+}));
+
 /** CORS — all other routes (skip public paths handled above) */
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith('/api/v1/public/')) return next();
@@ -115,7 +122,9 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/social-accounts', socialAccountRoutes);
 app.use('/api/v1/connections', connectionRoutes);
 app.use('/api/v1/org', orgSettingsRoutes);
+app.use('/api/v1/org/sites', siteRoutes);
 app.use('/api/v1/public/leads', publicLeadRoutes);
+app.use('/api/v1/public/sites', publicSiteRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 /** Global error handler */

@@ -42,6 +42,12 @@ const options: swaggerJsdoc.Options = {
           bearerFormat: 'JWT',
           description: 'JWT token via Authorization header (fallback)',
         },
+        apiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'x-api-key',
+          description: 'Public API key (pk_live_*) used by script tags and embeds',
+        },
       },
       schemas: {
         Error: {

@@ -15,7 +15,7 @@ export const authenticatePublicKey = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const publicKey = req.body.key || req.headers['x-api-key'];
+    const publicKey = req.body?.key ?? req.headers['x-api-key'];
 
     if (!publicKey || typeof publicKey !== 'string') {
       res.status(401).json({

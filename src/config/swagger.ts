@@ -718,7 +718,7 @@ const options: swaggerJsdoc.Options = {
             _id: { type: 'string' },
             userId: { type: 'string' },
             provider: { type: 'string', enum: ['whatsapp', 'instagram', 'facebook_messenger', 'internal'] },
-            type: { type: 'string', enum: ['new_message', 'connection_request', 'mention', 'stage_message'] },
+            type: { type: 'string', enum: ['new_message', 'connection_request', 'mention', 'stage_message', 'new_lead'] },
             title: { type: 'string', example: 'New WhatsApp Message' },
             metadata: { type: 'object', nullable: true },
             read: { type: 'boolean', default: false },

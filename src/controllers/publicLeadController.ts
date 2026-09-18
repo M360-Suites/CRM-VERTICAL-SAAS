@@ -1,8 +1,13 @@
+import mongoose from 'mongoose';
 import { Response } from 'express';
 import { Contact } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
+import { Organization } from '../models/Organization';
+import { Notification } from '../models/Notification';
+import { User } from '../models/User';
 import { generateLeadTitle } from '../utils/groq';
+import { emitNotification } from '../services/socketService';
 import { logger } from '../config/logger';
 import { PublicKeyRequest } from '../middleware/publicAuth';
 
@@ -23,6 +28,75 @@ interface LeadCaptureBody {
 }
 
 const LEAD_STAGE_NAME = 'Lead';
+
+const toObjectId = (id: string) => new mongoose.Types.ObjectId(id);
+
+/**
+ * Notify all admins (role=admin or org owner) of a newly captured public lead.
+ * Best effort — never fails the lead capture request.
+ */
+const notifyAdminsOfNewLead = async (
+  organizationId: mongoose.Types.ObjectId,
+  lead: {
+    contactId: mongoose.Types.ObjectId;
+    dealId?: mongoose.Types.ObjectId | null;
+    first_name: string;
+    last_name: string;
+    email?: string;
+    phone?: string;
+    source?: string;
+    company?: string;
+  }
+): Promise<void> => {
+  try {
+    const organization = await Organization.findById(organizationId)
+      .select('owner_id')
+      .lean();
+
+    const admins = await User.find({
+      organization_id: organizationId,
+      is_active: true,
+      ...(organization?.owner_id ? { $or: [{ role: 'admin' }, { _id: organization.owner_id }] } : {})
+    })
+      .select('_id')
+      .lean();
+
+    const userIds = admins.map((admin) => admin._id.toString());
+    if (userIds.length === 0) return;
+
+    const leadName = `${lead.first_name || 'Unknown'} ${lead.last_name || 'Lead'}`.trim();
+    const title = `New lead captured: ${leadName}`;
+
+    await Notification.create(
+      userIds.map((userId) => ({
+        userId: toObjectId(userId),
+        provider: 'internal',
+        type: 'new_lead',
+        title,
+        metadata: {
+          contact_id: lead.contactId.toString(),
+          deal_id: lead.dealId?.toString() ?? null,
+          first_name: lead.first_name || null,
+          last_name: lead.last_name || null,
+          email: lead.email || null,
+          phone: lead.phone || null,
+          source: lead.source || 'web-capture',
+          company: lead.company || null
+        }
+      }))
+    );
+
+    for (const userId of userIds) {
+      emitNotification(userId, {
+        provider: 'internal',
+        title,
+        createdAt: new Date()
+      });
+    }
+  } catch (error) {
+    logger.warn({ err: error }, 'Failed to notify admins of new lead');
+  }
+};
 
 /**
  * Create a lead from a public form submission (script tag / embed)
@@ -144,6 +218,17 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     } catch (dealError) {
       logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
     }
+
+    await notifyAdminsOfNewLead(organization._id, {
+      contactId: contact._id,
+      dealId: deal?._id ?? null,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      email: contact.email,
+      phone: contact.phone,
+      source: source || 'web-capture',
+      company
+    });
 
     res.status(201).json({
       status: true,

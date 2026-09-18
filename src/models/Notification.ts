@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export type NotificationProvider = 'whatsapp' | 'instagram' | 'facebook_messenger' | 'internal';
 
-export type NotificationType = 'new_message' | 'connection_request' | 'mention' | 'stage_message';
+export type NotificationType = 'new_message' | 'connection_request' | 'mention' | 'stage_message' | 'new_lead';
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
@@ -24,7 +24,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ['new_message', 'connection_request', 'mention', 'stage_message'],
+      enum: ['new_message', 'connection_request', 'mention', 'stage_message', 'new_lead'],
       default: 'new_message'
     },
     title: { type: String, required: true },

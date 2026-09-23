@@ -51,7 +51,9 @@ const config = {
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET!,
   UNIPILE_API_KEY: process.env.UNIPILE_API_KEY,
   UNIPILE_DSN: process.env.UNIPILE_DSN ?? 'api51.unipile.com:18170',
-  UNIPILE_WEBHOOK_SECRET: process.env.UNIPILE_WEBHOOK_SECRET
+  UNIPILE_WEBHOOK_SECRET: process.env.UNIPILE_WEBHOOK_SECRET,
+  MIDLINE_API_KEY: process.env.MIDLINE_API_KEY,
+  MIDLINE_SERVICE_NAME: process.env.MIDLINE_SERVICE_NAME ?? 'crm-backend'
 };
 
 export default config;

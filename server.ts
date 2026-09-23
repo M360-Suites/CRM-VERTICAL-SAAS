@@ -40,10 +40,17 @@ import { startTaskReminderService } from './src/services/taskReminderService';
 import { startStaleDealReminderService } from './src/services/staleDealReminderService';
 import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
+import { MidlineAgent, midlineMiddleware, midlineErrorHandler } from 'midline-agent';
 
 const app = express();
 const httpServer = http.createServer(app);
 const PORT = config.PORT;
+
+MidlineAgent.init({
+  apiKey: config.MIDLINE_API_KEY,
+  serviceName: config.MIDLINE_SERVICE_NAME,
+  environment: process.env.NODE_ENV
+});
 
 type RequestParseError = Error & {
   status?: number;
@@ -93,6 +100,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   })(req, res, next);
 });
 
+/** Midline request monitoring — logs every request except health checks */
+app.use(
+  midlineMiddleware({
+    ignore: (req) => req.url === '/health'
+  })
+);
+
 if (config.SWAGGER_ENABLED) {
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
@@ -126,6 +140,9 @@ app.use('/api/v1/org/sites', siteRoutes);
 app.use('/api/v1/public/leads', publicLeadRoutes);
 app.use('/api/v1/public/sites', publicSiteRoutes);
 app.use('/api/webhooks', webhookRoutes);
+
+/** Midline error recording — runs before the global handler, forwards errors unchanged */
+app.use(midlineErrorHandler());
 
 /** Global error handler */
 app.use((err: RequestParseError, req: Request, res: Response, next: NextFunction) => {

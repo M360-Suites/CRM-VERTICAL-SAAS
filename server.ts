@@ -52,6 +52,13 @@ MidlineAgent.init({
   environment: process.env.NODE_ENV
 });
 
+const midlineKey = config.MIDLINE_API_KEY?.trim() || '';
+logger.info(
+  midlineKey
+    ? `Midline key in use: ${midlineKey.slice(0, 6)}…${midlineKey.slice(-4)} (type=${midlineKey.slice(0, 3)}, len=${midlineKey.length})`
+    : 'Midline key not set in environment'
+);
+
 logger.info(
   MidlineAgent.current?.active
     ? 'Midline monitoring is active'

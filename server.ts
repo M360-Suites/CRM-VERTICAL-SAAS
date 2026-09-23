@@ -52,6 +52,12 @@ MidlineAgent.init({
   environment: process.env.NODE_ENV
 });
 
+logger.info(
+  MidlineAgent.current?.active
+    ? 'Midline monitoring is active'
+    : 'Midline monitoring is OFF — set MIDLINE_API_KEY in the environment to enable'
+);
+
 type RequestParseError = Error & {
   status?: number;
   type?: string;

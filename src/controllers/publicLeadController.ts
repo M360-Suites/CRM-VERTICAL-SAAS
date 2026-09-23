@@ -8,6 +8,7 @@ import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import { generateLeadTitle } from '../utils/groq';
 import { emitNotification } from '../services/socketService';
+import { sendNewLeadEmail } from '../utils/email';
 import { logger } from '../config/logger';
 import { PublicKeyRequest } from '../middleware/publicAuth';
 
@@ -58,7 +59,7 @@ const notifyAdminsOfNewLead = async (
       is_active: true,
       ...(organization?.owner_id ? { $or: [{ role: 'admin' }, { _id: organization.owner_id }] } : {})
     })
-      .select('_id')
+      .select('_id email display_name')
       .lean();
 
     const userIds = admins.map((admin) => admin._id.toString());
@@ -93,6 +94,22 @@ const notifyAdminsOfNewLead = async (
         createdAt: new Date()
       });
     }
+
+    await sendNewLeadEmail(
+      admins
+        .map((admin) => ({
+          address: admin.email,
+          name: admin.display_name || ''
+        }))
+        .filter((recipient) => Boolean(recipient.address)),
+      {
+        leadName,
+        email: lead.email,
+        phone: lead.phone,
+        source: lead.source,
+        company: lead.company
+      }
+    );
   } catch (error) {
     logger.warn({ err: error }, 'Failed to notify admins of new lead');
   }

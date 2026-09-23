@@ -174,6 +174,43 @@ export const sendStageCommentEmail = async (
   });
 };
 
+export const sendNewLeadEmail = async (
+  recipients: Array<{ address: string; name: string }>,
+  input: {
+    leadName: string;
+    contactName?: string;
+    email?: string;
+    phone?: string;
+    source?: string;
+    company?: string;
+  }
+): Promise<void> => {
+  const leadLine = [input.leadName, input.company]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(' - ');
+
+  const detailRows = [
+    input.email ? `<p><strong>Email:</strong> ${escapeHtml(input.email)}</p>` : '',
+    input.phone ? `<p><strong>Phone:</strong> ${escapeHtml(input.phone)}</p>` : '',
+    input.source ? `<p><strong>Source:</strong> ${escapeHtml(input.source)}</p>` : ''
+  ].join('');
+
+  await sendMail({
+    subject: `New lead captured: ${leadLine || input.leadName}`,
+    message: `
+      <h2>New lead landed in your CRM</h2>
+      <p>A new lead has been captured.</p>
+      ${leadLine ? `<p><strong>${escapeHtml(leadLine)}</strong></p>` : ''}
+      ${detailRows}
+      <p>Please review this lead and assign it to a sales rep.</p>
+      <p style="color: #64748b; font-size: 13px;">You are receiving this because you are an organization admin.</p>
+    `,
+    mailType: 'html',
+    recipients
+  });
+};
+
 export { sendMail };
 
 export const sendStaleLeadReminderEmail = async (

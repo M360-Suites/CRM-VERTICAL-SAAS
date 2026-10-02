@@ -12,7 +12,7 @@ const router: RouterType = Router();
  *   post:
  *     tags: [Public]
  *     summary: Capture a lead from script tag
- *     description: Creates a contact from an anonymous form submission. Requires a valid public API key.
+ *     description: Creates a contact and a deal from an anonymous form submission, then the Revenue Engine routes it (score, routing rule or least-loaded rep, owner notification, attribution touchpoints, pending nurture draft). Requires a valid public API key.
  *     requestBody:
  *       required: true
  *       content:
@@ -58,6 +58,43 @@ const router: RouterType = Router();
  *               domain:
  *                 type: string
  *                 description: Alias for site
+ *               intent_score:
+ *                 type: integer
+ *                 minimum: 0
+ *                 maximum: 100
+ *                 description: Revenue Engine routing score. Defaults from temperature (hot 80, warm 50, cold 25) or 50.
+ *               region:
+ *                 type: string
+ *                 description: Matched against routing rule regions (case-insensitive), e.g. EMEA
+ *               tier:
+ *                 type: string
+ *                 description: Matched against routing rule tiers, e.g. Enterprise
+ *               channel:
+ *                 type: string
+ *                 enum: [email, whatsapp, sms]
+ *                 description: Channel for the auto-generated nurture draft. Defaults to email if an email is given, else whatsapp.
+ *               platform:
+ *                 type: string
+ *                 enum: [google_ads, meta, linkedin, tiktok, web_form, seo, other]
+ *                 description: Traffic source. Auto-detected from click IDs / UTM tags when omitted.
+ *               utm_source:
+ *                 type: string
+ *               utm_medium:
+ *                 type: string
+ *               utm_campaign:
+ *                 type: string
+ *               campaign_id:
+ *                 type: string
+ *                 description: Ad platform campaign ID (alias utm_id) — links the lead to that campaign's spend for ROI
+ *               gclid:
+ *                 type: string
+ *                 description: Google Ads click ID (also gbraid / wbraid)
+ *               fbclid:
+ *                 type: string
+ *               li_fat_id:
+ *                 type: string
+ *               ttclid:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Lead captured successfully

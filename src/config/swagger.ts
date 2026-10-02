@@ -48,6 +48,12 @@ const options: swaggerJsdoc.Options = {
           name: 'x-api-key',
           description: 'Public API key (pk_live_*) used by script tags and embeds',
         },
+        ingestSecretAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'x-ingest-secret',
+          description: 'Organization secret key (sk_live_*) for server-to-server ingestion. Never use in browser code.',
+        },
       },
       schemas: {
         Error: {

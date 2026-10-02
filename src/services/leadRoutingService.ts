@@ -1,0 +1,306 @@
+import mongoose from 'mongoose';
+import { Contact, IContact, RoutingMode } from '../models/Contact';
+import { Deal } from '../models/Deal';
+import { User } from '../models/User';
+import { Organization } from '../models/Organization';
+import { Notification } from '../models/Notification';
+import { RoutingRule } from '../models/RoutingRule';
+import { AttributionTouchpoint } from '../models/AttributionTouchpoint';
+import { AD_PLATFORMS, AdPlatform } from '../models/AdConnector';
+import { NURTURE_CHANNELS, NurtureChannel } from '../models/NurtureTemplate';
+import { createTemplateDraft } from './nurtureService';
+import { emitNotification } from './socketService';
+import { recordWarehouseEvent } from '../utils/warehouse';
+import { logger } from '../config/logger';
+
+export const ROUTABLE_ROLES = ['sales_rep', 'sales_manager', 'admin'];
+
+export interface LeadSignals {
+  intent_score?: unknown;
+  temperature?: string;
+  region?: string;
+  tier?: string;
+  platform?: string;
+  source?: string;
+  channel?: string;
+  company?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  /** Platform campaign ID (utm_id / campaign_id) — links the lead to ad spend */
+  campaign_id?: string;
+  gclid?: string;
+  fbclid?: string;
+  li_fat_id?: string;
+  ttclid?: string;
+}
+
+const TEMPERATURE_SCORES: Record<string, number> = { hot: 80, warm: 50, cold: 25 };
+
+/** Explicit 0–100 score wins; otherwise derived from temperature; default 50 */
+export const scoreIntent = (signals: Pick<LeadSignals, 'intent_score' | 'temperature'>): number => {
+  const explicit = Number(signals.intent_score);
+  if (signals.intent_score !== undefined && signals.intent_score !== '' && Number.isFinite(explicit)) {
+    return Math.max(0, Math.min(100, Math.round(explicit)));
+  }
+  return TEMPERATURE_SCORES[signals.temperature ?? ''] ?? 50;
+};
+
+const PAID_MEDIUMS = ['cpc', 'ppc', 'paid', 'paidsearch', 'paid_search', 'paid_social', 'paidsocial', 'cpm', 'display'];
+
+/** Work out which traffic source produced the lead from click IDs and UTM tags */
+export const detectPlatform = (signals: LeadSignals): AdPlatform => {
+  const explicit = signals.platform?.toLowerCase();
+  if (explicit && (AD_PLATFORMS as readonly string[]).includes(explicit)) return explicit as AdPlatform;
+
+  if (signals.gclid) return 'google_ads';
+  if (signals.fbclid) return 'meta';
+  if (signals.li_fat_id) return 'linkedin';
+  if (signals.ttclid) return 'tiktok';
+
+  const source = signals.utm_source?.toLowerCase() ?? '';
+  const medium = signals.utm_medium?.toLowerCase() ?? '';
+  if (source.includes('google') || source === 'adwords') {
+    return PAID_MEDIUMS.includes(medium) ? 'google_ads' : 'seo';
+  }
+  if (['bing', 'duckduckgo', 'yahoo'].some((engine) => source.includes(engine)) && medium === 'organic') return 'seo';
+  if (['facebook', 'instagram', 'meta', 'fb', 'ig'].includes(source)) return 'meta';
+  if (source.includes('linkedin')) return 'linkedin';
+  if (source.includes('tiktok')) return 'tiktok';
+
+  return 'web_form';
+};
+
+export interface RuleLike {
+  _id?: unknown;
+  name: string;
+  priority: number;
+  region?: string | null;
+  tier?: string | null;
+  platform?: string | null;
+  min_intent_score?: number | null;
+  assignee_id?: unknown;
+  is_active: boolean;
+}
+
+const sameText = (ruleValue?: string | null, leadValue?: string | null): boolean =>
+  !ruleValue || (!!leadValue && ruleValue.trim().toLowerCase() === leadValue.trim().toLowerCase());
+
+/**
+ * First active rule (lowest priority number) whose region, tier, platform and
+ * minimum intent score all match. Empty rule fields match anything.
+ */
+export const matchRoutingRule = <T extends RuleLike>(
+  rules: T[],
+  lead: { region?: string; tier?: string; platform?: string; intent_score: number }
+): T | null =>
+  [...rules]
+    .filter((rule) => rule.is_active)
+    .sort((a, b) => a.priority - b.priority)
+    .find(
+      (rule) =>
+        sameText(rule.region, lead.region) &&
+        sameText(rule.tier, lead.tier) &&
+        (!rule.platform || rule.platform === lead.platform) &&
+        lead.intent_score >= (rule.min_intent_score ?? 0)
+    ) ?? null;
+
+/** Active rep in the org with the fewest routed leads; ties broken randomly */
+export const pickLeastLoadedRep = async (
+  organizationId: mongoose.Types.ObjectId
+): Promise<mongoose.Types.ObjectId | null> => {
+  const reps = await User.find({ organization_id: organizationId, is_active: true, role: { $in: ROUTABLE_ROLES } })
+    .select('_id')
+    .lean();
+  if (reps.length === 0) return null;
+
+  const loads = await Contact.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+    {
+      $match: {
+        organization_id: organizationId,
+        owner_id: { $in: reps.map((rep) => rep._id) },
+        'routing.routed_at': { $exists: true }
+      }
+    },
+    { $group: { _id: '$owner_id', count: { $sum: 1 } } }
+  ]);
+  const loadByRep = new Map(loads.map((load) => [load._id.toString(), load.count]));
+
+  const ranked = reps
+    .map((rep) => ({ id: rep._id as mongoose.Types.ObjectId, load: loadByRep.get(rep._id.toString()) ?? 0, tie: Math.random() }))
+    .sort((a, b) => a.load - b.load || a.tie - b.tie);
+  return ranked[0].id;
+};
+
+const isActiveRep = async (organizationId: mongoose.Types.ObjectId, userId: unknown): Promise<boolean> =>
+  !!userId &&
+  !!(await User.exists({ _id: userId, organization_id: organizationId, is_active: true, role: { $in: ROUTABLE_ROLES } }));
+
+const pickChannel = (requested: string | undefined, contact: IContact): NurtureChannel => {
+  if (requested && (NURTURE_CHANNELS as readonly string[]).includes(requested)) return requested as NurtureChannel;
+  if (contact.email) return 'email';
+  if (contact.phone) return 'whatsapp';
+  return 'email';
+};
+
+export interface RoutingOutcome {
+  owner_id: mongoose.Types.ObjectId | null;
+  rule_name: string | null;
+  mode: RoutingMode;
+  intent_score: number;
+  platform: AdPlatform;
+  draft_id: mongoose.Types.ObjectId | null;
+}
+
+/**
+ * The Revenue Engine lead pipeline, run inline right after a lead is captured:
+ * score → match rule → assign owner (rule assignee, else least-loaded rep) →
+ * stamp routing on the contact → notify owner → log → attribution touchpoints →
+ * pending nurture draft. Each side effect is best effort; routing never fails capture.
+ */
+export const routeNewLead = async (
+  contact: IContact,
+  signals: LeadSignals,
+  options: { dealId?: mongoose.Types.ObjectId | null } = {}
+): Promise<RoutingOutcome> => {
+  const organizationId = contact.organization_id;
+  const intentScore = scoreIntent(signals);
+  const platform = detectPlatform(signals);
+
+  const rules = await RoutingRule.find({ organization_id: organizationId, is_active: true })
+    .sort({ priority: 1, created_at: 1 })
+    .lean();
+  const rule = matchRoutingRule(rules, { region: signals.region, tier: signals.tier, platform, intent_score: intentScore });
+
+  let ownerId: mongoose.Types.ObjectId | null = (contact.owner_id as mongoose.Types.ObjectId | undefined) ?? null;
+  if (!ownerId && rule?.assignee_id && (await isActiveRep(organizationId, rule.assignee_id))) {
+    ownerId = rule.assignee_id as mongoose.Types.ObjectId;
+  }
+  if (!ownerId) ownerId = await pickLeastLoadedRep(organizationId);
+
+  const mode: RoutingMode = rule ? 'rule' : ownerId ? 'balanced' : 'unassigned';
+  const routing = {
+    intent_score: intentScore,
+    region: signals.region,
+    tier: signals.tier,
+    platform,
+    source: signals.source,
+    rule_id: rule?._id as mongoose.Types.ObjectId | undefined,
+    rule_name: rule?.name,
+    mode,
+    routed_at: new Date()
+  };
+
+  await Contact.updateOne(
+    { _id: contact._id, organization_id: organizationId },
+    { $set: { routing, ...(ownerId ? { owner_id: ownerId } : {}) } }
+  );
+  if (ownerId && options.dealId) {
+    await Deal.updateOne(
+      { _id: options.dealId, organization_id: organizationId, owner_id: { $exists: false } },
+      { $set: { owner_id: ownerId } }
+    );
+  }
+
+  const leadName = `${contact.first_name} ${contact.last_name}`.trim() || contact.email || 'Unknown lead';
+
+  if (ownerId) {
+    try {
+      const title = `New lead assigned: ${leadName}`;
+      await Notification.create({
+        userId: ownerId,
+        provider: 'internal',
+        type: 'new_lead',
+        title,
+        metadata: {
+          contact_id: contact._id.toString(),
+          deal_id: options.dealId?.toString() ?? null,
+          intent_score: intentScore,
+          rule: rule?.name ?? null,
+          link: '/revenue-engine'
+        }
+      });
+      emitNotification(ownerId.toString(), { provider: 'internal', title, createdAt: new Date() });
+    } catch (error) {
+      logger.warn({ err: error }, 'Failed to notify routed lead owner');
+    }
+  }
+
+  await recordWarehouseEvent({
+    organizationId,
+    source: 'uroe',
+    eventType: 'lead_routed',
+    entityType: 'contact',
+    entityId: contact._id as mongoose.Types.ObjectId,
+    actorId: ownerId ?? undefined,
+    payload: {
+      rule_id: rule?._id?.toString() ?? null,
+      rule_name: rule?.name ?? null,
+      routing_mode: mode,
+      intent_score: intentScore,
+      platform,
+      source: signals.source ?? null
+    }
+  });
+
+  try {
+    const shared = {
+      organization_id: organizationId,
+      contact_id: contact._id,
+      platform,
+      external_campaign_id: signals.campaign_id || undefined,
+      metadata: {
+        utm_source: signals.utm_source,
+        utm_medium: signals.utm_medium,
+        utm_campaign: signals.utm_campaign,
+        click_id: signals.gclid || signals.fbclid || signals.li_fat_id || signals.ttclid
+      }
+    };
+    await AttributionTouchpoint.insertMany([
+      { ...shared, type: 'contact_created' },
+      ...(options.dealId ? [{ ...shared, deal_id: options.dealId, type: 'deal_created' as const }] : [])
+    ]);
+  } catch (error) {
+    logger.warn({ err: error }, 'Failed to record lead touchpoints');
+  }
+
+  let draftId: mongoose.Types.ObjectId | null = null;
+  try {
+    const [owner, organization] = await Promise.all([
+      ownerId ? User.findById(ownerId).select('display_name').lean() : null,
+      Organization.findById(organizationId).select('name').lean()
+    ]);
+    const draft = await createTemplateDraft({
+      organizationId,
+      contactId: contact._id as mongoose.Types.ObjectId,
+      assigneeId: ownerId ?? undefined,
+      channel: pickChannel(signals.channel, contact),
+      intentScore,
+      fields: {
+        first_name: contact.first_name !== 'Unknown' ? contact.first_name : 'there',
+        company: signals.company || 'your team',
+        source: signals.source || 'your enquiry',
+        campaign_name: signals.utm_campaign,
+        rep_name: owner?.display_name,
+        our_company: organization?.name
+      },
+      promptFacts: []
+    });
+    if (draft) {
+      draftId = draft._id as mongoose.Types.ObjectId;
+      await recordWarehouseEvent({
+        organizationId,
+        source: 'uroe',
+        eventType: 'nurture_draft_created',
+        entityType: 'nurture_draft',
+        entityId: draftId,
+        actorId: ownerId ?? undefined,
+        payload: { channel: draft.channel, model: draft.ai_model, contact_id: contact._id.toString() }
+      });
+    }
+  } catch (error) {
+    logger.warn({ err: error }, 'Failed to create nurture draft for routed lead');
+  }
+
+  return { owner_id: ownerId, rule_name: rule?.name ?? null, mode, intent_score: intentScore, platform, draft_id: draftId };
+};

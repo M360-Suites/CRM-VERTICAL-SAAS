@@ -12,6 +12,23 @@ import mongoose, { Document, Schema } from 'mongoose';
  */
 export type Temperature = 'hot' | 'warm' | 'cold';
 
+export type RoutingMode = 'rule' | 'balanced' | 'unassigned';
+
+/**
+ * Stamped by the Revenue Engine when a lead is auto-routed on creation
+ */
+export interface ILeadRouting {
+  intent_score: number;
+  region?: string;
+  tier?: string;
+  platform?: string;
+  source?: string;
+  rule_id?: mongoose.Types.ObjectId;
+  rule_name?: string;
+  mode: RoutingMode;
+  routed_at: Date;
+}
+
 /**
  * Contact document interface
  * Extends Mongoose Document with typed fields
@@ -28,6 +45,7 @@ export interface IContact extends Document {
   temperature: Temperature;
   tags: string[];
   last_contacted_at?: Date;
+  routing?: ILeadRouting;
   created_at: Date;
   updated_at: Date;
 }
@@ -52,7 +70,23 @@ const ContactSchema = new Schema<IContact>(
       default: 'warm'
     },
     tags: [{ type: String }],
-    last_contacted_at: { type: Date }
+    last_contacted_at: { type: Date },
+    routing: {
+      type: new Schema<ILeadRouting>(
+        {
+          intent_score: { type: Number },
+          region: { type: String },
+          tier: { type: String },
+          platform: { type: String },
+          source: { type: String },
+          rule_id: { type: Schema.Types.ObjectId, ref: 'RoutingRule' },
+          rule_name: { type: String },
+          mode: { type: String, enum: ['rule', 'balanced', 'unassigned'] },
+          routed_at: { type: Date }
+        },
+        { _id: false }
+      )
+    }
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
@@ -64,5 +98,6 @@ ContactSchema.index({ organization_id: 1, email: 1 });
 ContactSchema.index({ organization_id: 1, company_id: 1 });
 ContactSchema.index({ organization_id: 1, owner_id: 1 });
 ContactSchema.index({ organization_id: 1, temperature: 1 });
+ContactSchema.index({ organization_id: 1, 'routing.routed_at': -1 });
 
 export const Contact = mongoose.model<IContact>('Contact', ContactSchema);

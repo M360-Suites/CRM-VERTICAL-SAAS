@@ -35,9 +35,13 @@ import publicLeadRoutes from './src/routes/publicLeadRoutes';
 import orgSettingsRoutes from './src/routes/orgSettingsRoutes';
 import siteRoutes from './src/routes/siteRoutes';
 import publicSiteRoutes from './src/routes/publicSiteRoutes';
+import googleAdsRoutes from './src/routes/googleAdsRoutes';
+import revopsRoutes from './src/routes/revopsRoutes';
+import publicIngestRoutes from './src/routes/publicIngestRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { startTaskReminderService } from './src/services/taskReminderService';
 import { startStaleDealReminderService } from './src/services/staleDealReminderService';
+import { startGoogleAdsSyncService } from './src/services/googleAdsSyncService';
 import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
 import { MidlineAgent, midlineMiddleware, midlineErrorHandler } from 'midline-agent';
@@ -152,6 +156,9 @@ app.use('/api/v1/org', orgSettingsRoutes);
 app.use('/api/v1/org/sites', siteRoutes);
 app.use('/api/v1/public/leads', publicLeadRoutes);
 app.use('/api/v1/public/sites', publicSiteRoutes);
+app.use('/api/v1/integrations/google-ads', googleAdsRoutes);
+app.use('/api/v1/revops', revopsRoutes);
+app.use('/api/v1/public/ingest', publicIngestRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 /** Midline error recording — runs before the global handler, forwards errors unchanged */
@@ -183,6 +190,7 @@ const startServer = async () => {
     await seedPipeline();
     startTaskReminderService();
     startStaleDealReminderService();
+    startGoogleAdsSyncService();
     initializeSocket(httpServer);
 
     httpServer.listen(PORT, () => {

@@ -984,6 +984,61 @@ All activity routes require authentication.
 
 ---
 
+### Revenue Engine
+
+Ad spend in, attributed revenue out. One page with 8 tabs; every endpoint below is org-scoped and requires authentication unless marked public. The first call for an organization seeds its 6 connectors, 5 KPI targets and 6 starter templates.
+
+**Access:** read = all roles · work = admin, sales_manager, sales_rep · manage = admin, sales_manager
+
+| Tab | Method | Endpoint | Description | Access |
+|-----|--------|----------|-------------|--------|
+| CRO Dashboard | GET | /revops/overview?from&to | Spend, revenue, ROAS, CAC, win rate, cycle days, impressions, clicks, CPC, cost per lead, `by_platform` (spend vs revenue), `targets` | read |
+| CRO Dashboard | GET | /revops/targets | KPI targets (`ad_cost`, `revenue`, `roas`, `cac`, `cycle_days`) | read |
+| CRO Dashboard | PUT | /revops/targets/:key | `{ target_value, label?, unit? }` | manage |
+| Ad Connectors | GET | /revops/connectors | Cards: status, last sync, campaigns, tracked spend, `connect_via` (`oauth` for Google Ads, else `manual`) | read |
+| Ad Connectors | PATCH | /revops/connectors/:id/status | `{ status: connected \| disconnected \| error }` — not allowed for Google Ads | manage |
+| Ad Connectors | GET | /integrations/google-ads/status · /auth · /accounts | Google Ads OAuth connect flow | read / manage |
+| Ad Connectors | POST | /integrations/google-ads/accounts/select · /sync | Pick ad account (starts 30-day backfill) · re-sync now | manage |
+| Ad Connectors | DELETE | /integrations/google-ads | Disconnect, keep history | admin |
+| Attribution & ROI | GET | /revops/attribution?from&to | `funnel` (impression → click → contact_created → deal_created → deal_won) and `campaigns` (spend, leads, deals, revenue, ROI %) | read |
+| Attribution & ROI | POST | /revops/touchpoints | Record a journey step `{ type, contact_id?, deal_id?, platform?, external_campaign_id?, value? }` | work |
+| Cost Intelligence | GET | /revops/costs?from&to&platform | CPC, CTR, CPM, cost per conversion by platform, campaign and day | read |
+| Cost Intelligence | GET | /revops/campaigns?page&limit&platform&from&to | Spend ledger with CPC per row | read |
+| Cost Intelligence | POST | /revops/campaigns | Log spend `{ platform, name, stat_date, spend, impressions, clicks, adset_id?, creative_id? }` — same day re-logs overwrite | manage |
+| Cost Intelligence | DELETE | /revops/campaigns/:id | Delete a spend row | manage |
+| Instant Routing | GET | /revops/routed-leads?limit | Recently auto-routed leads: score, rule, owner, routed time | read |
+| Instant Routing | GET / POST | /revops/routing-rules | List (by priority) / create `{ name, priority, region?, tier?, platform?, min_intent_score, assignee_id? }` | read / manage |
+| Instant Routing | PATCH / DELETE | /revops/routing-rules/:id | Update (incl. `is_active` to pause) / delete | manage |
+| Instant Routing | POST | /revops/routing-rules/simulate | `{ region, tier, intent_score, platform }` → matched rule, assignee, outcome text | read |
+| Instant Routing | GET | /revops/reps | Assignee picker (active admins, managers, reps) | read |
+| AI Nurture | GET | /revops/drafts?status | `stats` (pending, approved, rejected, sent, avg_latency_ms) + approval queue | read |
+| AI Nurture | POST | /revops/drafts/generate | `{ contact_id, channel, template_id?, tone?, intent_score?, notes? }` — always lands as `pending` | work |
+| AI Nurture | PATCH | /revops/drafts/:id | Edit a pending draft `{ subject?, body? }` | work |
+| AI Nurture | PATCH | /revops/drafts/:id/status | `{ status }` — pending → approved/rejected, approved → sent/rejected; else 409 | work |
+| Template Library | GET / POST | /revops/templates | List / create `{ name, channel, tone, stage, subject, body, is_fallback }` | read / manage |
+| Template Library | PATCH / DELETE | /revops/templates/:id | Update / delete | manage |
+| Data Warehouse | GET | /revops/warehouse?limit&event_type | `counts`, `event_mix` (top 8), recent `events` | read |
+
+**Lead routing is automatic.** Every lead captured on `POST /public/leads/inbound` is scored, matched against routing rules (lowest priority number first; region, tier, platform and minimum score must all match), assigned to the rule's rep or the least-loaded rep, notified, logged, given `contact_created`/`deal_created` touchpoints and a pending nurture draft. Optional lead fields that drive this: `intent_score` (0–100), `region`, `tier`, `channel` (email/whatsapp/sms), `utm_source`, `utm_medium`, `utm_campaign`, `campaign_id`/`utm_id`, `gclid`, `fbclid`, `li_fat_id`, `ttclid`.
+
+**Template merge fields:** `{{first_name}}`, `{{company}}`, `{{source}}`, `{{rep_name}}`, `{{our_company}}`, `{{campaign_name}}`, `{{industry}}`. Unfilled fields stay visible for the reviewer.
+
+#### POST /public/ingest/ad-events (public, server-to-server)
+
+Header `x-ingest-secret: <organization sk_live_ secret key>`.
+
+```json
+{
+  "events": [
+    { "platform": "meta", "campaign_id": "123", "adset_id": "", "creative_id": "", "name": "Retargeting", "date": "2026-10-01", "spend": 50, "impressions": 500, "clicks": 5, "currency": "USD" }
+  ]
+}
+```
+
+Max 500 events. Upserts on (platform, campaign_id, adset_id, creative_id, date) — re-sending a batch never duplicates spend. `401` bad secret · `400 { issues: [{ path, message }] }` · `200 { status: true, data: { ingested, spend, platforms } }`.
+
+---
+
 ### User Roles
 
 | Role | Permissions |

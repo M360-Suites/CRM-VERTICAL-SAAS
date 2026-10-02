@@ -11,6 +11,8 @@ import { emitNotification } from '../services/socketService';
 import { sendNewLeadEmail } from '../utils/email';
 import { logger } from '../config/logger';
 import { PublicKeyRequest } from '../middleware/publicAuth';
+import { routeNewLead } from '../services/leadRoutingService';
+import { ensureRevopsDefaults } from '../services/revopsDefaults';
 
 interface LeadCaptureBody {
   name?: string;
@@ -236,6 +238,34 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       });
     } catch (dealError) {
       logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
+    }
+
+    try {
+      await ensureRevopsDefaults(organization._id as mongoose.Types.ObjectId);
+      await routeNewLead(
+        contact,
+        {
+          intent_score: pick('intent_score', 'intentScore'),
+          temperature,
+          region: pick<string>('region'),
+          tier: pick<string>('tier'),
+          platform: pick<string>('platform'),
+          source,
+          channel: pick<string>('channel'),
+          company,
+          utm_source: pick<string>('utm_source'),
+          utm_medium: pick<string>('utm_medium'),
+          utm_campaign: pick<string>('utm_campaign'),
+          campaign_id: pick<string>('campaign_id', 'utm_id'),
+          gclid: pick<string>('gclid', 'gbraid', 'wbraid'),
+          fbclid: pick<string>('fbclid'),
+          li_fat_id: pick<string>('li_fat_id'),
+          ttclid: pick<string>('ttclid')
+        },
+        { dealId: (deal?._id as mongoose.Types.ObjectId | undefined) ?? null }
+      );
+    } catch (routingError) {
+      logger.warn({ err: routingError }, 'Lead routing failed, lead saved unrouted');
     }
 
     await notifyAdminsOfNewLead(organization._id, {

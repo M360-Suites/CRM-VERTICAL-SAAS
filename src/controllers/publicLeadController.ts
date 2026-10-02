@@ -146,6 +146,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     const phone = pick<string>('phone');
     const company = pick<string>('company');
     const message = pick<string>('message');
+    const summary = pick<string>('summary') ?? message;
     const source = pick<string>('source');
     const temperature = pick<'hot' | 'warm' | 'cold'>('temperature');
     const rawTags = pick<string | string[]>('tags');
@@ -223,6 +224,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
 
       deal = await Deal.create({
         title: dealTitle,
+        summary,
         status: 'open',
         contact_id: contact._id,
         organization_id: organization._id,

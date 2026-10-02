@@ -12,6 +12,7 @@ export type DealStatus = 'open' | 'won' | 'lost';
  */
 export interface IDeal extends Document {
   title: string;
+  summary?: string;
   value?: number;
   currency?: string;
   status: DealStatus;
@@ -38,6 +39,7 @@ export interface IDeal extends Document {
 const DealSchema = new Schema<IDeal>(
   {
     title: { type: String, required: true },
+    summary: { type: String },
     value: { type: Number },
     currency: { type: String, default: 'USD' },
     status: {

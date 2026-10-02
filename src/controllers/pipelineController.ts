@@ -79,6 +79,7 @@ const formatStageAssignees = (
 const formatDeal = (deal: {
   _id: unknown;
   title: string;
+  summary?: string;
   value?: number;
   source?: string;
   industry?: string;
@@ -96,6 +97,7 @@ const formatDeal = (deal: {
   return {
     id: deal._id,
     title: deal.title,
+    summary: deal.summary,
     value: deal.value,
     source: deal.source,
     industry: deal.industry,

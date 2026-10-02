@@ -12,6 +12,7 @@ import { sendNewLeadEmail } from '../utils/email';
 import { logger } from '../config/logger';
 import { PublicKeyRequest } from '../middleware/publicAuth';
 import { routeNewLead } from '../services/leadRoutingService';
+import { LEAD_VALUE_FIELDS, parseLeadValue } from '../utils/leadValue';
 import { ensureRevopsDefaults } from '../services/revopsDefaults';
 
 interface LeadCaptureBody {
@@ -152,6 +153,11 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     const source = pick<string>('source');
     const temperature = pick<'hot' | 'warm' | 'cold'>('temperature');
     const rawTags = pick<string | string[]>('tags');
+    const dealValue = parseLeadValue(pick<unknown>(...LEAD_VALUE_FIELDS));
+    const rawCurrency = pick<string>('currency');
+    const currency = typeof rawCurrency === 'string' && /^[a-z]{3}$/i.test(rawCurrency.trim())
+      ? rawCurrency.trim().toUpperCase()
+      : undefined;
 
     const customTags = Array.isArray(rawTags)
       ? rawTags
@@ -227,6 +233,9 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       deal = await Deal.create({
         title: dealTitle,
         summary,
+        // Only set when the form sent a usable budget/value — unknown stays unset, never 0
+        ...(dealValue !== undefined ? { value: dealValue } : {}),
+        ...(currency ? { currency } : {}),
         status: 'open',
         contact_id: contact._id,
         organization_id: organization._id,
@@ -288,7 +297,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         last_name: contact.last_name,
         email: contact.email,
         deal_id: deal?._id ?? null,
-        deal_title: dealTitle
+        deal_title: dealTitle,
+        deal_value: deal?.value ?? null
       }
     });
   } catch (error) {

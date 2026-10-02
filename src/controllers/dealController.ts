@@ -565,7 +565,7 @@ export const getDealStats = async (req: AuthRequest, res: Response): Promise<voi
       status: true,
       message: 'Deal stats retrieved successfully',
       data: {
-        value: deal.value || 0,
+        value: deal.value ?? null,
         currency: deal.currency || 'USD',
         status: deal.status,
         task_count: taskCount,

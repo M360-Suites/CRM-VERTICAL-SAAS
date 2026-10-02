@@ -98,7 +98,7 @@ const formatDeal = (deal: {
     id: deal._id,
     title: deal.title,
     summary: deal.summary,
-    value: deal.value,
+    value: deal.value ?? null,
     source: deal.source,
     industry: deal.industry,
     stage_id:

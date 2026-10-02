@@ -58,6 +58,16 @@ const router: RouterType = Router();
  *               domain:
  *                 type: string
  *                 description: Alias for site
+ *               value:
+ *                 oneOf:
+ *                   - type: number
+ *                   - type: string
+ *                 description: Deal value / budget (aliases deal_value, estimated_value, budget, amount). Accepts "$5,000", "5k", "1.2m", ranges like "5k-10k" (midpoint). Omitted or unparseable leaves the deal value unknown (null), never 0.
+ *                 example: 5k-10k
+ *               currency:
+ *                 type: string
+ *                 description: 3-letter currency code for the deal value (default USD)
+ *                 example: USD
  *               intent_score:
  *                 type: integer
  *                 minimum: 0

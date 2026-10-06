@@ -1,6 +1,6 @@
 import request from 'supertest';
 
-jest.mock('../src/config', () => ({ __esModule: true, default: { JWT_SECRET: 'test-secret', GROQ_MODEL: 'test-model' } }));
+jest.mock('../src/config', () => ({ __esModule: true, default: { JWT_SECRET: 'test-secret' } }));
 
 jest.mock('../src/middleware/auth', () => {
   const { mockAuthentication } = require('./helpers/featureRouteHarness');
@@ -13,12 +13,9 @@ jest.mock('../src/controllers/revopsController', () => {
   const { mockControllerStub } = require('./helpers/featureRouteHarness');
   return Object.fromEntries(
     [
-      'createTouchpoint',
       'deleteCampaignRow',
-      'getAttribution',
       'getCosts',
       'getOverview',
-      'getWarehouse',
       'listCampaignRows',
       'listConnectors',
       'listTargets',
@@ -38,26 +35,9 @@ jest.mock('../src/controllers/routingController', () => {
   );
 });
 
-jest.mock('../src/controllers/nurtureController', () => {
-  const { mockControllerStub } = require('./helpers/featureRouteHarness');
-  return Object.fromEntries(
-    [
-      'createTemplate',
-      'deleteTemplate',
-      'editDraft',
-      'generateDraft',
-      'listDrafts',
-      'listTemplates',
-      'updateDraftStatus',
-      'updateTemplate'
-    ].map((name) => [name, mockControllerStub(name)])
-  );
-});
-
 import revopsRoutes from '../src/routes/revopsRoutes';
 import { authenticated, createApp } from './helpers/featureRouteHarness';
 import { detectPlatform, matchRoutingRule, scoreIntent } from '../src/services/leadRoutingService';
-import { fillTemplate } from '../src/services/nurtureService';
 import { parseAdSpendEvent } from '../src/controllers/publicIngestController';
 
 const app = createApp('/revops', revopsRoutes);
@@ -67,15 +47,11 @@ describe('revops routes — every tab is reachable and role-gated', () => {
   it.each([
     ['get', '/revops/overview', 'getOverview'],
     ['get', '/revops/connectors', 'listConnectors'],
-    ['get', '/revops/attribution', 'getAttribution'],
     ['get', '/revops/costs', 'getCosts'],
     ['get', '/revops/campaigns', 'listCampaignRows'],
     ['get', '/revops/routing-rules', 'listRules'],
     ['post', '/revops/routing-rules/simulate', 'simulateRouting'],
     ['get', '/revops/routed-leads', 'listRoutedLeads'],
-    ['get', '/revops/drafts', 'listDrafts'],
-    ['get', '/revops/templates', 'listTemplates'],
-    ['get', '/revops/warehouse', 'getWarehouse'],
     ['get', '/revops/targets', 'listTargets']
   ] as const)('viewers can read %s %s', async (method, path, handler) => {
     const response = await as('viewer', request(app)[method](path));
@@ -90,29 +66,10 @@ describe('revops routes — every tab is reachable and role-gated', () => {
     ['post', '/revops/routing-rules'],
     ['patch', '/revops/routing-rules/abc'],
     ['delete', '/revops/routing-rules/abc'],
-    ['post', '/revops/templates'],
-    ['patch', '/revops/templates/abc'],
-    ['delete', '/revops/templates/abc'],
     ['put', '/revops/targets/revenue']
   ] as const)('sales reps cannot configure the engine: %s %s', async (method, path) => {
     const response = await as('sales_rep', request(app)[method](path));
     expect(response.status).toBe(403);
-  });
-
-  it.each([
-    ['post', '/revops/drafts/generate', 'generateDraft'],
-    ['patch', '/revops/drafts/abc', 'editDraft'],
-    ['patch', '/revops/drafts/abc/status', 'updateDraftStatus'],
-    ['post', '/revops/touchpoints', 'createTouchpoint']
-  ] as const)('sales reps can work drafts and touchpoints: %s %s', async (method, path, handler) => {
-    const response = await as('sales_rep', request(app)[method](path));
-    expect(response.status).toBeLessThan(300);
-    expect(response.body.handler).toBe(handler);
-  });
-
-  it('viewers cannot generate or approve drafts', async () => {
-    expect((await as('viewer', request(app).post('/revops/drafts/generate'))).status).toBe(403);
-    expect((await as('viewer', request(app).patch('/revops/drafts/abc/status'))).status).toBe(403);
   });
 
   it('managers can configure the engine', async () => {
@@ -186,14 +143,6 @@ describe('matchRoutingRule', () => {
 
   it('a rule with a region does not match a lead without one', () => {
     expect(matchRoutingRule(rules.slice(1), { intent_score: 90 })).toBeNull();
-  });
-});
-
-describe('fillTemplate', () => {
-  it('fills known merge fields and leaves unknown ones for the reviewer', () => {
-    expect(fillTemplate('Hi {{first_name}} from {{ company }} — re {{pain_point}}', { first_name: 'Ada', company: 'Acme' })).toBe(
-      'Hi Ada from Acme — re {{pain_point}}'
-    );
   });
 });
 

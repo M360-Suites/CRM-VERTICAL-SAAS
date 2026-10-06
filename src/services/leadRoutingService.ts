@@ -2,15 +2,10 @@ import mongoose from 'mongoose';
 import { Contact, IContact, RoutingMode } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { User } from '../models/User';
-import { Organization } from '../models/Organization';
 import { Notification } from '../models/Notification';
 import { RoutingRule } from '../models/RoutingRule';
-import { AttributionTouchpoint } from '../models/AttributionTouchpoint';
 import { AD_PLATFORMS, AdPlatform } from '../models/AdConnector';
-import { NURTURE_CHANNELS, NurtureChannel } from '../models/NurtureTemplate';
-import { createTemplateDraft } from './nurtureService';
 import { emitNotification } from './socketService';
-import { recordWarehouseEvent } from '../utils/warehouse';
 import { logger } from '../config/logger';
 
 export const ROUTABLE_ROLES = ['sales_rep', 'sales_manager', 'admin'];
@@ -22,13 +17,8 @@ export interface LeadSignals {
   tier?: string;
   platform?: string;
   source?: string;
-  channel?: string;
-  company?: string;
   utm_source?: string;
   utm_medium?: string;
-  utm_campaign?: string;
-  /** Platform campaign ID (utm_id / campaign_id) — links the lead to ad spend */
-  campaign_id?: string;
   gclid?: string;
   fbclid?: string;
   li_fat_id?: string;
@@ -136,27 +126,19 @@ const isActiveRep = async (organizationId: mongoose.Types.ObjectId, userId: unkn
   !!userId &&
   !!(await User.exists({ _id: userId, organization_id: organizationId, is_active: true, role: { $in: ROUTABLE_ROLES } }));
 
-const pickChannel = (requested: string | undefined, contact: IContact): NurtureChannel => {
-  if (requested && (NURTURE_CHANNELS as readonly string[]).includes(requested)) return requested as NurtureChannel;
-  if (contact.email) return 'email';
-  if (contact.phone) return 'whatsapp';
-  return 'email';
-};
-
 export interface RoutingOutcome {
   owner_id: mongoose.Types.ObjectId | null;
   rule_name: string | null;
   mode: RoutingMode;
   intent_score: number;
   platform: AdPlatform;
-  draft_id: mongoose.Types.ObjectId | null;
 }
 
 /**
  * The Revenue Engine lead pipeline, run inline right after a lead is captured:
  * score → match rule → assign owner (rule assignee, else least-loaded rep) →
- * stamp routing on the contact → notify owner → log → attribution touchpoints →
- * pending nurture draft. Each side effect is best effort; routing never fails capture.
+ * stamp routing on the contact → notify owner. Notification is best effort;
+ * routing never fails capture.
  */
 export const routeNewLead = async (
   contact: IContact,
@@ -226,81 +208,5 @@ export const routeNewLead = async (
     }
   }
 
-  await recordWarehouseEvent({
-    organizationId,
-    source: 'uroe',
-    eventType: 'lead_routed',
-    entityType: 'contact',
-    entityId: contact._id as mongoose.Types.ObjectId,
-    actorId: ownerId ?? undefined,
-    payload: {
-      rule_id: rule?._id?.toString() ?? null,
-      rule_name: rule?.name ?? null,
-      routing_mode: mode,
-      intent_score: intentScore,
-      platform,
-      source: signals.source ?? null
-    }
-  });
-
-  try {
-    const shared = {
-      organization_id: organizationId,
-      contact_id: contact._id,
-      platform,
-      external_campaign_id: signals.campaign_id || undefined,
-      metadata: {
-        utm_source: signals.utm_source,
-        utm_medium: signals.utm_medium,
-        utm_campaign: signals.utm_campaign,
-        click_id: signals.gclid || signals.fbclid || signals.li_fat_id || signals.ttclid
-      }
-    };
-    await AttributionTouchpoint.insertMany([
-      { ...shared, type: 'contact_created' },
-      ...(options.dealId ? [{ ...shared, deal_id: options.dealId, type: 'deal_created' as const }] : [])
-    ]);
-  } catch (error) {
-    logger.warn({ err: error }, 'Failed to record lead touchpoints');
-  }
-
-  let draftId: mongoose.Types.ObjectId | null = null;
-  try {
-    const [owner, organization] = await Promise.all([
-      ownerId ? User.findById(ownerId).select('display_name').lean() : null,
-      Organization.findById(organizationId).select('name').lean()
-    ]);
-    const draft = await createTemplateDraft({
-      organizationId,
-      contactId: contact._id as mongoose.Types.ObjectId,
-      assigneeId: ownerId ?? undefined,
-      channel: pickChannel(signals.channel, contact),
-      intentScore,
-      fields: {
-        first_name: contact.first_name !== 'Unknown' ? contact.first_name : 'there',
-        company: signals.company || 'your team',
-        source: signals.source || 'your enquiry',
-        campaign_name: signals.utm_campaign,
-        rep_name: owner?.display_name,
-        our_company: organization?.name
-      },
-      promptFacts: []
-    });
-    if (draft) {
-      draftId = draft._id as mongoose.Types.ObjectId;
-      await recordWarehouseEvent({
-        organizationId,
-        source: 'uroe',
-        eventType: 'nurture_draft_created',
-        entityType: 'nurture_draft',
-        entityId: draftId,
-        actorId: ownerId ?? undefined,
-        payload: { channel: draft.channel, model: draft.ai_model, contact_id: contact._id.toString() }
-      });
-    }
-  } catch (error) {
-    logger.warn({ err: error }, 'Failed to create nurture draft for routed lead');
-  }
-
-  return { owner_id: ownerId, rule_name: rule?.name ?? null, mode, intent_score: intentScore, platform, draft_id: draftId };
+  return { owner_id: ownerId, rule_name: rule?.name ?? null, mode, intent_score: intentScore, platform };
 };

@@ -501,34 +501,3 @@ export const generateEmail = async (input: EmailGenerationInput): Promise<EmailR
 
   return parseEmailResult(text);
 };
-
-/**
- * Personalise an approved nurture template. Returns raw model text; callers
- * parse the "Subject:" line for email. Throws on any failure so callers can
- * fall back to the template verbatim.
- */
-export const generateNurtureText = async (instructions: string, input: string): Promise<string> => {
-  const response = await fetch(GROQ_RESPONSES_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.GROQ_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: config.GROQ_MODEL,
-      instructions,
-      input,
-      temperature: 0.5,
-      max_output_tokens: 600
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Groq nurture generation failed with status ${response.status}`);
-  }
-
-  const text = getResponseText((await response.json()) as GroqResponsesApiResponse);
-  if (!text) throw new Error('Groq nurture generation returned an empty response');
-
-  return normalizeGeneratedText(text);
-};

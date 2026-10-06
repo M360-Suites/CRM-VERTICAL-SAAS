@@ -1,16 +1,9 @@
-import mongoose from 'mongoose';
 import { Response } from 'express';
 import { AuthRequest } from '../types';
 import { AdCampaign } from '../models/AdCampaign';
 import { AD_PLATFORMS, AdConnector } from '../models/AdConnector';
 import { RevenueTarget, REVENUE_TARGET_KEYS } from '../models/RevenueTarget';
-import { AttributionTouchpoint, TOUCHPOINT_TYPES } from '../models/AttributionTouchpoint';
-import { WarehouseEvent } from '../models/WarehouseEvent';
-import { NurtureDraft } from '../models/NurtureDraft';
-import { Contact } from '../models/Contact';
-import { Deal } from '../models/Deal';
 import { requireOrganization } from '../utils/tenant';
-import { recordWarehouseEvent } from '../utils/warehouse';
 import {
   DATE_PATTERN,
   optionalDate,
@@ -20,7 +13,7 @@ import {
   optionalString,
   parsePaging
 } from '../utils/revopsInput';
-import { DateRange, buildAttribution, buildOverview, spendByPlatform } from '../services/revopsMetrics';
+import { DateRange, buildOverview, spendByPlatform } from '../services/revopsMetrics';
 import { logger } from '../config/logger';
 
 const DEFAULT_RANGE_DAYS = 30;
@@ -177,22 +170,6 @@ export const getOverview = async (req: AuthRequest, res: Response): Promise<void
 };
 
 /**
- * GET /revops/attribution — journey funnel and campaign ROI
- */
-export const getAttribution = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const organizationId = requireOrganization(req, res);
-    if (!organizationId) return;
-    const range = parseRange(req, res);
-    if (!range) return;
-
-    res.json({ status: true, data: await buildAttribution(organizationId, range) });
-  } catch (error) {
-    handleError(res, error, 'Failed to load attribution');
-  }
-};
-
-/**
  * GET /revops/connectors — one card per traffic source with campaign count and tracked spend
  */
 export const listConnectors = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -260,16 +237,6 @@ export const updateConnectorStatus = async (req: AuthRequest, res: Response): Pr
     connector.status = status;
     if (status === 'connected') connector.last_synced_at = new Date();
     await connector.save();
-
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: `connector_${status}`,
-      entityType: 'ad_connector',
-      entityId: connector._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { platform: connector.platform, status }
-    });
 
     res.json({ status: true, message: `Connector marked ${status}`, data: connector });
   } catch (error) {
@@ -383,16 +350,6 @@ export const logCampaignSpend = async (req: AuthRequest, res: Response): Promise
       { upsert: true, new: true }
     );
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'ad_spend_logged',
-      entityType: 'ad_campaign',
-      entityId: row._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { platform, spend: spend ?? 0, date: statDate }
-    });
-
     res.status(201).json({ status: true, message: 'Spend recorded', data: row });
   } catch (error) {
     handleError(res, error, 'Failed to record spend');
@@ -414,61 +371,9 @@ export const deleteCampaignRow = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'ad_spend_deleted',
-      entityType: 'ad_campaign',
-      entityId: row._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { platform: row.platform, spend: row.spend, date: row.stat_date }
-    });
-
     res.json({ status: true, message: 'Spend row deleted' });
   } catch (error) {
     handleError(res, error, 'Failed to delete spend row');
-  }
-};
-
-/**
- * GET /revops/warehouse — counts, event mix and the recent event log
- * Query: limit (max 500), event_type
- */
-export const getWarehouse = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const organizationId = requireOrganization(req, res);
-    if (!organizationId) return;
-
-    const { limit } = parsePaging(req.query as Record<string, unknown>, 150, 500);
-    const eventType = optionalString(req.query.event_type, 100);
-
-    const [events, touchpoints, campaignRows, drafts, eventMix, recent] = await Promise.all([
-      WarehouseEvent.countDocuments({ organization_id: organizationId }),
-      AttributionTouchpoint.countDocuments({ organization_id: organizationId }),
-      AdCampaign.countDocuments({ organization_id: organizationId }),
-      NurtureDraft.countDocuments({ organization_id: organizationId }),
-      WarehouseEvent.aggregate<{ _id: string; count: number }>([
-        { $match: { organization_id: organizationId } },
-        { $group: { _id: '$event_type', count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 8 }
-      ]),
-      WarehouseEvent.find({ organization_id: organizationId, ...(eventType ? { event_type: eventType } : {}) })
-        .sort({ at: -1 })
-        .limit(limit)
-        .lean()
-    ]);
-
-    res.json({
-      status: true,
-      data: {
-        counts: { events, touchpoints, campaign_rows: campaignRows, drafts },
-        event_mix: eventMix.map((row) => ({ event_type: row._id, count: row.count })),
-        events: recent
-      }
-    });
-  } catch (error) {
-    handleError(res, error, 'Failed to load warehouse');
   }
 };
 
@@ -518,85 +423,8 @@ export const updateTarget = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'target_updated',
-      entityType: 'revenue_target',
-      entityId: target._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { key, target_value: targetValue }
-    });
-
     res.json({ status: true, message: 'Target updated', data: target });
   } catch (error) {
     handleError(res, error, 'Failed to update target');
-  }
-};
-
-/**
- * POST /revops/touchpoints — record a journey step (e.g. a pixel event or an offline deal win)
- */
-export const createTouchpoint = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const organizationId = requireOrganization(req, res);
-    if (!organizationId) return;
-
-    const body = req.body ?? {};
-    const type = optionalEnum(body.type, TOUCHPOINT_TYPES);
-    const platform = optionalEnum(body.platform, AD_PLATFORMS);
-    const contactId = optionalObjectId(body.contact_id);
-    const dealId = optionalObjectId(body.deal_id);
-    const campaignId = optionalString(body.external_campaign_id ?? body.campaign_id, 200);
-    const value = optionalNumber(body.value, 0, 1_000_000_000_000);
-    const occurredAt = body.occurred_at ? new Date(body.occurred_at) : new Date();
-
-    if (
-      !type ||
-      platform === null ||
-      contactId === null ||
-      dealId === null ||
-      campaignId === null ||
-      value === null ||
-      Number.isNaN(occurredAt.getTime())
-    ) {
-      res.status(400).json({ status: false, message: 'Invalid touchpoint' });
-      return;
-    }
-
-    const [contactOk, dealOk] = await Promise.all([
-      contactId ? Contact.exists({ _id: contactId, organization_id: organizationId }) : true,
-      dealId ? Deal.exists({ _id: dealId, organization_id: organizationId }) : true
-    ]);
-    if (!contactOk || !dealOk) {
-      res.status(404).json({ status: false, message: 'Contact or deal not found' });
-      return;
-    }
-
-    const touchpoint = await AttributionTouchpoint.create({
-      organization_id: organizationId,
-      contact_id: contactId,
-      deal_id: dealId,
-      platform,
-      external_campaign_id: campaignId,
-      type,
-      value,
-      occurred_at: occurredAt,
-      metadata: typeof body.metadata === 'object' && body.metadata && !Array.isArray(body.metadata) ? body.metadata : {}
-    });
-
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'touchpoint_recorded',
-      entityType: 'attribution_touchpoint',
-      entityId: touchpoint._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { type, platform: platform ?? null, value: value ?? null }
-    });
-
-    res.status(201).json({ status: true, message: 'Touchpoint recorded', data: touchpoint });
-  } catch (error) {
-    handleError(res, error, 'Failed to record touchpoint');
   }
 };

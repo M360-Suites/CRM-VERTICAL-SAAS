@@ -8,7 +8,6 @@ import { User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
 import { encryptString, decryptString } from '../utils/crypto';
 import { getFrontendUrl } from '../utils/frontend';
-import { recordWarehouseEvent } from '../utils/warehouse';
 import {
   GOOGLE_ADS_SCOPES,
   GoogleAdsApiError,
@@ -135,16 +134,6 @@ export const handleGoogleAdsCallback = async (req: Request, res: Response): Prom
       { upsert: true, new: true }
     );
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'google_ads_oauth',
-      eventType: 'ad_connector_authorized',
-      entityType: 'ad_connector',
-      entityId: connector._id as mongoose.Types.ObjectId,
-      actorId: user._id as mongoose.Types.ObjectId,
-      payload: { platform: 'google_ads' }
-    });
-
     redirectToFrontend(res, { step: 'select_account' });
   } catch (error) {
     logger.error({ err: error }, 'Google Ads OAuth callback failed');
@@ -247,16 +236,6 @@ export const selectGoogleAdsAccount = async (req: AuthRequest, res: Response): P
     connector.last_sync_error = undefined;
     await connector.save();
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'google_ads_oauth',
-      eventType: 'ad_connector_connected',
-      entityType: 'ad_connector',
-      entityId: connector._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { platform: 'google_ads', account_id: account.customer_id }
-    });
-
     // Initial backfill runs in the background; the scheduler keeps it fresh afterwards
     void syncGoogleAdsConnector(connector._id as mongoose.Types.ObjectId, { actorId: req.user?.id }).catch((error) =>
       logger.warn({ err: error, connectorId: connector._id }, 'Initial Google Ads backfill failed')
@@ -348,16 +327,6 @@ export const disconnectGoogleAds = async (req: AuthRequest, res: Response): Prom
     connector.refresh_token = undefined;
     connector.sync_lock_until = undefined;
     await connector.save();
-
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'google_ads_oauth',
-      eventType: 'ad_connector_disconnected',
-      entityType: 'ad_connector',
-      entityId: connector._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { platform: 'google_ads', account_id: connector.external_account_id ?? null }
-    });
 
     res.json({ status: true, message: 'Google Ads disconnected' });
   } catch (error) {

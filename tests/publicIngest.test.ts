@@ -14,7 +14,6 @@ jest.mock('../src/models/AdConnector', () => ({
   AdConnector: { find: connectorFind, updateMany }
 }));
 jest.mock('../src/services/revopsDefaults', () => ({ ensureRevopsDefaults: jest.fn() }));
-jest.mock('../src/utils/warehouse', () => ({ recordWarehouseEvent: jest.fn() }));
 
 import publicIngestRoutes from '../src/routes/publicIngestRoutes';
 

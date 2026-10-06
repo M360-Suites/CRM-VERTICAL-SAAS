@@ -9,7 +9,6 @@ import {
   getAccessToken,
   isGoogleAdsConfigured
 } from '../utils/googleAds';
-import { recordWarehouseEvent } from '../utils/warehouse';
 import { logger } from '../config/logger';
 
 const DEFAULT_INTERVAL_MINUTES = 360;
@@ -144,16 +143,6 @@ export const syncGoogleAdsConnector = async (
         $unset: { last_sync_error: 1, sync_lock_until: 1 }
       }
     );
-
-    await recordWarehouseEvent({
-      organizationId: connector.organization_id,
-      source: 'google_ads_sync',
-      eventType: 'ad_spend_ingested',
-      entityType: 'ad_connector',
-      entityId: connector._id as mongoose.Types.ObjectId,
-      actorId: options.actorId,
-      payload: { platform: 'google_ads', rows: rows.length, spend, from, to }
-    });
 
     return { rows: rows.length, spend, from, to };
   } catch (error) {

@@ -12,7 +12,7 @@ const router: RouterType = Router();
  *   post:
  *     tags: [Public]
  *     summary: Capture a lead from script tag
- *     description: Creates a contact and a deal from an anonymous form submission, then the Revenue Engine routes it (score, routing rule or least-loaded rep, owner notification, attribution touchpoints, pending nurture draft). Requires a valid public API key.
+ *     description: Creates a contact and a deal from an anonymous form submission, then the Revenue Engine routes it (score, routing rule or least-loaded rep, owner notification). Requires a valid public API key.
  *     requestBody:
  *       required: true
  *       content:
@@ -79,10 +79,6 @@ const router: RouterType = Router();
  *               tier:
  *                 type: string
  *                 description: Matched against routing rule tiers, e.g. Enterprise
- *               channel:
- *                 type: string
- *                 enum: [email, whatsapp, sms]
- *                 description: Channel for the auto-generated nurture draft. Defaults to email if an email is given, else whatsapp.
  *               platform:
  *                 type: string
  *                 enum: [google_ads, meta, linkedin, tiktok, web_form, seo, other]
@@ -91,11 +87,6 @@ const router: RouterType = Router();
  *                 type: string
  *               utm_medium:
  *                 type: string
- *               utm_campaign:
- *                 type: string
- *               campaign_id:
- *                 type: string
- *                 description: Ad platform campaign ID (alias utm_id) — links the lead to that campaign's spend for ROI
  *               gclid:
  *                 type: string
  *                 description: Google Ads click ID (also gbraid / wbraid)

@@ -6,7 +6,6 @@ import { AD_PLATFORMS } from '../models/AdConnector';
 import { Contact } from '../models/Contact';
 import { User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
-import { recordWarehouseEvent } from '../utils/warehouse';
 import { optionalEnum, optionalNumber, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { ROUTABLE_ROLES, matchRoutingRule } from '../services/leadRoutingService';
 import { logger } from '../config/logger';
@@ -154,16 +153,6 @@ export const createRule = async (req: AuthRequest, res: Response): Promise<void>
       ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== null && value !== undefined))
     });
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'routing_rule_created',
-      entityType: 'routing_rule',
-      entityId: rule._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { name: rule.name, priority: rule.priority }
-    });
-
     const populated = await RoutingRule.findById(rule._id).populate('assignee_id', 'display_name').lean();
     res.status(201).json({ status: true, message: 'Routing rule created', data: serializeRule(populated) });
   } catch (error) {
@@ -201,16 +190,6 @@ export const updateRule = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'routing_rule_updated',
-      entityType: 'routing_rule',
-      entityId: ruleId,
-      actorId: req.user?.id,
-      payload: { fields: Object.keys(input), is_active: rule.is_active }
-    });
-
     res.json({ status: true, message: 'Routing rule updated', data: serializeRule(rule) });
   } catch (error) {
     handleError(res, error, 'Failed to update routing rule');
@@ -231,16 +210,6 @@ export const deleteRule = async (req: AuthRequest, res: Response): Promise<void>
       res.status(404).json({ status: false, message: 'Routing rule not found' });
       return;
     }
-
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'uroe',
-      eventType: 'routing_rule_deleted',
-      entityType: 'routing_rule',
-      entityId: rule._id as mongoose.Types.ObjectId,
-      actorId: req.user?.id,
-      payload: { name: rule.name }
-    });
 
     res.json({ status: true, message: 'Routing rule deleted' });
   } catch (error) {

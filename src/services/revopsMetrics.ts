@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
 import { AdCampaign } from '../models/AdCampaign';
 import { Deal } from '../models/Deal';
-import { AttributionTouchpoint } from '../models/AttributionTouchpoint';
+import { Contact } from '../models/Contact';
 
 /**
- * Aggregations behind the CRO dashboard and Attribution tab. Everything runs as
+ * Aggregations behind the CRO dashboard. Everything runs as
  * MongoDB pipelines scoped to one organization; nothing loads raw rows into the app.
  */
 
@@ -50,118 +50,6 @@ export const spendByPlatform = async (organizationId: mongoose.Types.ObjectId, r
       }
     }
   ]);
-
-export interface AttributedRow {
-  platform: string | null;
-  campaign_id: string;
-  leads: number;
-  deals: number;
-  won_deals: number;
-  revenue: number;
-}
-
-/**
- * First-touch attribution: each contact is credited to the platform/campaign of
- * its earliest contact_created touchpoint, and that contact's won deals are its
- * revenue. Manually recorded deal_won touchpoint values are honored when larger.
- */
-export const attributedByCampaign = async (
-  organizationId: mongoose.Types.ObjectId,
-  range: DateRange
-): Promise<AttributedRow[]> => {
-  const [fromContacts, directWon] = await Promise.all([
-    AttributionTouchpoint.aggregate<AttributedRow & { _id: { platform: string | null; campaign_id: string } }>([
-      {
-        $match: {
-          organization_id: organizationId,
-          type: 'contact_created',
-          contact_id: { $exists: true },
-          ...timestampMatch('occurred_at', range)
-        }
-      },
-      { $sort: { occurred_at: 1 } },
-      {
-        $group: {
-          _id: '$contact_id',
-          platform: { $first: '$platform' },
-          campaign_id: { $first: { $ifNull: ['$external_campaign_id', ''] } }
-        }
-      },
-      {
-        $lookup: {
-          from: Deal.collection.name,
-          let: { contactId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $and: [{ $eq: ['$contact_id', '$$contactId'] }, { $eq: ['$organization_id', organizationId] }] }
-              }
-            },
-            { $project: { status: 1, value: 1 } }
-          ],
-          as: 'deals'
-        }
-      },
-      {
-        $project: {
-          platform: 1,
-          campaign_id: 1,
-          deal_count: { $size: '$deals' },
-          won: { $filter: { input: '$deals', cond: { $eq: ['$$this.status', 'won'] } } }
-        }
-      },
-      {
-        $group: {
-          _id: { platform: '$platform', campaign_id: '$campaign_id' },
-          leads: { $sum: 1 },
-          deals: { $sum: '$deal_count' },
-          won_deals: { $sum: { $size: '$won' } },
-          revenue: { $sum: { $sum: { $map: { input: '$won', in: { $ifNull: ['$$this.value', 0] } } } } }
-        }
-      }
-    ]),
-    AttributionTouchpoint.aggregate<{ _id: { platform: string | null; campaign_id: string }; revenue: number }>([
-      { $match: { organization_id: organizationId, type: 'deal_won', ...timestampMatch('occurred_at', range) } },
-      {
-        $group: {
-          _id: { platform: '$platform', campaign_id: { $ifNull: ['$external_campaign_id', ''] } },
-          revenue: { $sum: { $ifNull: ['$value', 0] } }
-        }
-      }
-    ])
-  ]);
-
-  const rows = new Map<string, AttributedRow>();
-  const keyOf = (id: { platform: string | null; campaign_id: string }) => `${id.platform ?? ''}|${id.campaign_id}`;
-
-  for (const row of fromContacts) {
-    rows.set(keyOf(row._id), {
-      platform: row._id.platform ?? null,
-      campaign_id: row._id.campaign_id,
-      leads: row.leads,
-      deals: row.deals,
-      won_deals: row.won_deals,
-      revenue: row.revenue
-    });
-  }
-  for (const row of directWon) {
-    const existing = rows.get(keyOf(row._id));
-    if (existing) {
-      existing.revenue = Math.max(existing.revenue, row.revenue);
-    } else {
-      rows.set(keyOf(row._id), {
-        platform: row._id.platform ?? null,
-        campaign_id: row._id.campaign_id,
-        leads: 0,
-        deals: 0,
-        won_deals: 0,
-        revenue: row.revenue
-      });
-    }
-  }
-
-  return [...rows.values()];
-};
 
 export interface DealTotals {
   revenue: number;
@@ -214,20 +102,44 @@ export const dealTotals = async (organizationId: mongoose.Types.ObjectId, range:
   };
 };
 
+/** Leads captured and routed by the Revenue Engine in the range */
 export const countLeads = (organizationId: mongoose.Types.ObjectId, range: DateRange): Promise<number> =>
-  AttributionTouchpoint.countDocuments({
+  Contact.countDocuments({
     organization_id: organizationId,
-    type: 'contact_created',
-    ...timestampMatch('occurred_at', range)
+    'routing.routed_at': { $exists: true },
+    ...timestampMatch('routing.routed_at', range)
   });
+
+/** Won revenue closed in the range, credited to the platform its contact was routed from */
+export const wonRevenueByPlatform = (
+  organizationId: mongoose.Types.ObjectId,
+  range: DateRange
+): Promise<{ _id: string | null; revenue: number }[]> =>
+  Deal.aggregate([
+    { $match: { organization_id: organizationId, status: 'won', ...timestampMatch('stage_changed_at', range) } },
+    {
+      $lookup: {
+        from: Contact.collection.name,
+        localField: 'contact_id',
+        foreignField: '_id',
+        as: 'contact'
+      }
+    },
+    {
+      $group: {
+        _id: { $arrayElemAt: ['$contact.routing.platform', 0] },
+        revenue: { $sum: { $ifNull: ['$value', 0] } }
+      }
+    }
+  ]);
 
 /** Everything on the CRO dashboard tab */
 export const buildOverview = async (organizationId: mongoose.Types.ObjectId, range: DateRange) => {
-  const [platformSpend, deals, leads, attributed] = await Promise.all([
+  const [platformSpend, deals, leads, platformRevenue] = await Promise.all([
     spendByPlatform(organizationId, range),
     dealTotals(organizationId, range),
     countLeads(organizationId, range),
-    attributedByCampaign(organizationId, range)
+    wonRevenueByPlatform(organizationId, range)
   ]);
 
   const spend = platformSpend.reduce((sum, row) => sum + row.spend, 0);
@@ -235,9 +147,8 @@ export const buildOverview = async (organizationId: mongoose.Types.ObjectId, ran
   const impressions = platformSpend.reduce((sum, row) => sum + row.impressions, 0);
 
   const revenueByPlatform = new Map<string, number>();
-  for (const row of attributed) {
-    if (!row.platform) continue;
-    revenueByPlatform.set(row.platform, (revenueByPlatform.get(row.platform) ?? 0) + row.revenue);
+  for (const row of platformRevenue) {
+    if (row._id) revenueByPlatform.set(row._id, row.revenue);
   }
 
   const platforms = new Set([...platformSpend.map((row) => row._id), ...revenueByPlatform.keys()]);
@@ -267,83 +178,5 @@ export const buildOverview = async (organizationId: mongoose.Types.ObjectId, ran
     cpc: round(safeDivide(spend, clicks)),
     cost_per_lead: round(safeDivide(spend, leads)),
     by_platform: byPlatform
-  };
-};
-
-/** Everything on the Attribution & ROI tab */
-export const buildAttribution = async (organizationId: mongoose.Types.ObjectId, range: DateRange) => {
-  const [attributed, campaignSpend, touchpointCounts] = await Promise.all([
-    attributedByCampaign(organizationId, range),
-    AdCampaign.aggregate<{ _id: { platform: string; campaign_id: string }; name: string; spend: number; clicks: number; impressions: number }>([
-      { $match: { organization_id: organizationId, ...statDateMatch(range) } },
-      { $sort: { stat_date: 1 } },
-      {
-        $group: {
-          _id: { platform: '$platform', campaign_id: '$external_campaign_id' },
-          name: { $last: '$name' },
-          spend: { $sum: '$spend' },
-          clicks: { $sum: '$clicks' },
-          impressions: { $sum: '$impressions' }
-        }
-      }
-    ]),
-    AttributionTouchpoint.aggregate<{ _id: string; count: number }>([
-      { $match: { organization_id: organizationId, ...timestampMatch('occurred_at', range) } },
-      { $group: { _id: '$type', count: { $sum: 1 } } }
-    ])
-  ]);
-
-  const key = (platform: string | null, campaignId: string) => `${platform ?? ''}|${campaignId}`;
-  const attributedByKey = new Map(attributed.map((row) => [key(row.platform, row.campaign_id), row]));
-
-  const campaigns = campaignSpend.map((row) => {
-    const match = attributedByKey.get(key(row._id.platform, row._id.campaign_id));
-    attributedByKey.delete(key(row._id.platform, row._id.campaign_id));
-    const revenue = match?.revenue ?? 0;
-    return {
-      platform: row._id.platform,
-      campaign_id: row._id.campaign_id,
-      name: row.name || row._id.campaign_id,
-      spend: round(row.spend),
-      clicks: row.clicks,
-      leads: match?.leads ?? 0,
-      deals: match?.deals ?? 0,
-      won_deals: match?.won_deals ?? 0,
-      revenue: round(revenue),
-      roi: row.spend ? round(((revenue - row.spend) / row.spend) * 100, 1) : null
-    };
-  });
-
-  // Leads that came in without a tracked campaign (organic, web form, unknown campaign)
-  for (const row of attributedByKey.values()) {
-    campaigns.push({
-      platform: row.platform ?? 'other',
-      campaign_id: row.campaign_id,
-      name: row.campaign_id || 'Untracked',
-      spend: 0,
-      clicks: 0,
-      leads: row.leads,
-      deals: row.deals,
-      won_deals: row.won_deals,
-      revenue: round(row.revenue),
-      roi: null
-    });
-  }
-
-  campaigns.sort((a, b) => b.revenue - a.revenue || b.spend - a.spend);
-
-  const touchpoints = Object.fromEntries(touchpointCounts.map((row) => [row._id, row.count]));
-  const adImpressions = campaignSpend.reduce((sum, row) => sum + row.impressions, 0);
-  const adClicks = campaignSpend.reduce((sum, row) => sum + row.clicks, 0);
-
-  return {
-    funnel: [
-      { stage: 'impression', value: Math.max(adImpressions, touchpoints.impression ?? 0) },
-      { stage: 'click', value: Math.max(adClicks, touchpoints.click ?? 0) },
-      { stage: 'contact_created', value: touchpoints.contact_created ?? 0 },
-      { stage: 'deal_created', value: touchpoints.deal_created ?? 0 },
-      { stage: 'deal_won', value: attributed.reduce((sum, row) => sum + row.won_deals, 0) }
-    ],
-    campaigns
   };
 };

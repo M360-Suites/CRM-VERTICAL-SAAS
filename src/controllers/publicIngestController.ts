@@ -3,7 +3,6 @@ import { Response } from 'express';
 import { IngestRequest } from '../middleware/ingestAuth';
 import { AdCampaign } from '../models/AdCampaign';
 import { AdConnector, AD_PLATFORMS, AdPlatform } from '../models/AdConnector';
-import { recordWarehouseEvent } from '../utils/warehouse';
 import { optionalDate, optionalEnum, optionalNumber, optionalString } from '../utils/revopsInput';
 import { ensureRevopsDefaults } from '../services/revopsDefaults';
 import { logger } from '../config/logger';
@@ -150,14 +149,6 @@ export const ingestAdEvents = async (req: IngestRequest, res: Response): Promise
       { organization_id: organizationId, platform: { $in: platforms.filter((platform) => platform !== 'google_ads') } },
       { $set: { status: 'connected', last_synced_at: now } }
     );
-
-    await recordWarehouseEvent({
-      organizationId,
-      source: 'ad_ingest_api',
-      eventType: 'ad_spend_ingested',
-      entityType: 'ad_campaign',
-      payload: { rows: parsed.length, spend, platforms }
-    });
 
     res.json({ status: true, data: { ingested: parsed.length, spend, platforms } });
   } catch (error) {

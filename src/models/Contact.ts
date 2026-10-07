@@ -14,6 +14,9 @@ export type Temperature = 'hot' | 'warm' | 'cold';
 
 export type RoutingMode = 'rule' | 'balanced' | 'unassigned';
 
+/** Why a contact no longer receives marketing/automated email */
+export type EmailOptOutReason = 'unsubscribed' | 'bounced' | 'complained';
+
 /**
  * Stamped by the Revenue Engine when a lead is auto-routed on creation
  */
@@ -46,6 +49,9 @@ export interface IContact extends Document {
   tags: string[];
   last_contacted_at?: Date;
   routing?: ILeadRouting;
+  email_opt_out: boolean;
+  email_opt_out_reason?: EmailOptOutReason;
+  email_opt_out_at?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -86,7 +92,10 @@ const ContactSchema = new Schema<IContact>(
         },
         { _id: false }
       )
-    }
+    },
+    email_opt_out: { type: Boolean, default: false },
+    email_opt_out_reason: { type: String, enum: ['unsubscribed', 'bounced', 'complained'] },
+    email_opt_out_at: { type: Date }
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

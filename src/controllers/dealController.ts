@@ -8,6 +8,7 @@ import { PipelineStage } from '../models/Pipeline';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { emitDealStageChanged } from '../services/socketService';
+import { queueDealTriggers } from '../services/triggerService';
 
 interface DealQuery {
   page?: number;
@@ -249,6 +250,7 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
     });
 
     await deal.save();
+    void queueDealTriggers({ organizationId, dealId: deal._id, stageId: stage_id, isNew: true });
 
     const populatedDeal = await Deal.findOne({ _id: deal._id, organization_id: organizationId })
       .populate('stage_id', 'name order is_won is_lost')
@@ -302,6 +304,10 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     const updateObj: Record<string, unknown> = { ...updateData };
+
+    if ('value' in updateData && (updateData.value === null || updateData.value === undefined)) {
+      updateObj.value = 0;
+    }
 
     if (updateData.expected_close_date) {
       updateObj.expected_close_date = new Date(updateData.expected_close_date);
@@ -423,6 +429,10 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
         title: deal.title,
         userId: req.user.id
       });
+    }
+
+    if (stageChangeInfo) {
+      void queueDealTriggers({ organizationId, dealId: deal._id, stageId: stageChangeInfo.stage_id });
     }
 
     res.json({ status: true, message: 'Deal updated successfully', data: deal });
@@ -565,7 +575,7 @@ export const getDealStats = async (req: AuthRequest, res: Response): Promise<voi
       status: true,
       message: 'Deal stats retrieved successfully',
       data: {
-        value: deal.value ?? null,
+        value: deal.value ?? 0,
         currency: deal.currency || 'USD',
         status: deal.status,
         task_count: taskCount,
@@ -700,6 +710,8 @@ export const updateDealStage = async (req: AuthRequest, res: Response): Promise<
       });
     }
 
+    void queueDealTriggers({ organizationId, dealId: deal._id, stageId: targetStageId });
+
     res.json({ status: true, message: 'Deal stage updated successfully', data: deal });
   } catch (error) {
     res.status(500).json({
@@ -768,6 +780,13 @@ export const bulkUpdateStage = async (req: AuthRequest, res: Response): Promise<
     const stageChangedAt = new Date();
     const status = targetStage.is_won ? 'won' : targetStage.is_lost ? 'lost' : 'open';
 
+    // Only deals actually changing stage should fire stage triggers
+    const movingDeals = await Deal.find({
+      _id: { $in: validObjectIds },
+      organization_id: organizationId,
+      stage_id: { $ne: new mongoose.Types.ObjectId(stage_id) }
+    }).select('_id').lean();
+
     const result = await Deal.updateMany(
       { _id: { $in: validObjectIds }, organization_id: organizationId },
       { $set: { stage_id: new mongoose.Types.ObjectId(stage_id), stage_changed_at: stageChangedAt, status } }
@@ -797,6 +816,10 @@ export const bulkUpdateStage = async (req: AuthRequest, res: Response): Promise<
         title: `bulk-${result.modifiedCount}`,
         userId: req.user.id
       });
+    }
+
+    for (const moved of movingDeals) {
+      void queueDealTriggers({ organizationId, dealId: moved._id, stageId: stage_id });
     }
 
     res.json({

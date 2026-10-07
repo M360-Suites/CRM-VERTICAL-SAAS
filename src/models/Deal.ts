@@ -40,7 +40,8 @@ const DealSchema = new Schema<IDeal>(
   {
     title: { type: String, required: true },
     summary: { type: String },
-    value: { type: Number },
+    /** Unknown value lands as 0, never null */
+    value: { type: Number, default: 0, set: (v: unknown) => (v === null || v === undefined || v === '' ? 0 : v) },
     currency: { type: String, default: 'USD' },
     status: {
       type: String,

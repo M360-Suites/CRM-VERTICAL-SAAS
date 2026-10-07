@@ -38,10 +38,16 @@ import publicSiteRoutes from './src/routes/publicSiteRoutes';
 import googleAdsRoutes from './src/routes/googleAdsRoutes';
 import revopsRoutes from './src/routes/revopsRoutes';
 import publicIngestRoutes from './src/routes/publicIngestRoutes';
+import emailTemplateRoutes from './src/routes/emailTemplateRoutes';
+import emailTriggerRoutes from './src/routes/emailTriggerRoutes';
+import broadcastRoutes from './src/routes/broadcastRoutes';
+import publicEmailRoutes from './src/routes/publicEmailRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
+import { backfillDealValues } from './src/seeds/dealValueBackfill';
 import { startTaskReminderService } from './src/services/taskReminderService';
 import { startStaleDealReminderService } from './src/services/staleDealReminderService';
 import { startGoogleAdsSyncService } from './src/services/googleAdsSyncService';
+import { startEmailDispatchService } from './src/services/emailDispatchService';
 import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
 import { MidlineAgent, midlineMiddleware, midlineErrorHandler } from 'midline-agent';
@@ -159,6 +165,10 @@ app.use('/api/v1/public/sites', publicSiteRoutes);
 app.use('/api/v1/integrations/google-ads', googleAdsRoutes);
 app.use('/api/v1/revops', revopsRoutes);
 app.use('/api/v1/public/ingest', publicIngestRoutes);
+app.use('/api/v1/public/email', publicEmailRoutes);
+app.use('/api/v1/email-templates', emailTemplateRoutes);
+app.use('/api/v1/email-triggers', emailTriggerRoutes);
+app.use('/api/v1/broadcasts', broadcastRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 /** Midline error recording — runs before the global handler, forwards errors unchanged */
@@ -188,9 +198,11 @@ const startServer = async () => {
   try {
     await connectDB();
     await seedPipeline();
+    await backfillDealValues();
     startTaskReminderService();
     startStaleDealReminderService();
     startGoogleAdsSyncService();
+    startEmailDispatchService();
     initializeSocket(httpServer);
 
     httpServer.listen(PORT, () => {

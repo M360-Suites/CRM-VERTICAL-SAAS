@@ -24,3 +24,17 @@ describe('parseLeadValue', () => {
     }
   );
 });
+
+describe('Deal value default', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Deal } = require('../src/models/Deal');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Types } = require('mongoose');
+
+  it('lands at 0 when no value is given, or value is null', () => {
+    const organization_id = new Types.ObjectId();
+    expect(new Deal({ title: 'No budget', organization_id }).value).toBe(0);
+    expect(new Deal({ title: 'Null budget', organization_id, value: null }).value).toBe(0);
+    expect(new Deal({ title: 'Has budget', organization_id, value: 2500 }).value).toBe(2500);
+  });
+});

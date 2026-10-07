@@ -1028,6 +1028,111 @@ Max 500 events. Upserts on (platform, campaign_id, adset_id, creative_id, date) 
 
 ---
 
+### Email Templates
+
+Emails built in the template canvas, used by triggers and broadcasts. `html` is what gets sent; `design` is the editor's own JSON, stored as-is so the canvas can reload it.
+
+**Access:** read = all roles · manage = admin only
+
+| Method | Endpoint | Description | Access |
+|--------|----------|-------------|--------|
+| GET | /email-templates?search&page&limit | List (no html/design), newest first | read |
+| POST | /email-templates | `{ name, subject, html, preview_text?, design? }` | manage |
+| GET | /email-templates/variables | Merge tags for the variable picker: `[{ key, label, sample, tag }]` | read |
+| POST | /email-templates/preview | `{ subject, html }` → rendered with sample data (for unsaved canvas content) | read |
+| GET / PATCH / DELETE | /email-templates/:id | Get with html + design / update / delete (`409` while a trigger uses it) | read / manage |
+| POST | /email-templates/:id/duplicate | Copy as "… (copy)" | manage |
+| POST | /email-templates/:id/test | Send to yourself with sample data | manage |
+
+**Merge tags:** `{{contact.first_name}}`, `{{contact.last_name}}`, `{{contact.full_name}}`, `{{contact.email}}`, `{{contact.phone}}`, `{{contact.role_title}}`, `{{company.name}}`, `{{deal.title}}`, `{{deal.value}}`, `{{deal.currency}}`, `{{stage.name}}`, `{{owner.name}}`, `{{owner.email}}`, `{{organization.name}}`, `{{unsubscribe_url}}`. Add a fallback with a pipe: `{{contact.first_name | there}}`. Values are HTML-escaped. If a template has no `{{unsubscribe_url}}`, an unsubscribe footer is added automatically when emailing contacts.
+
+---
+
+### Email Triggers
+
+User-configured automations: when something happens to a deal, send a template.
+
+**Access:** read = all roles · manage = admin only
+
+| Method | Endpoint | Description | Access |
+|--------|----------|-------------|--------|
+| GET | /email-triggers/events | Events a trigger can listen for | read |
+| GET | /email-triggers?event&stage_id | List triggers with stage, pipeline, template, `sent_count`, `last_fired_at` | read |
+| POST | /email-triggers | Create (body below) | manage |
+| GET / PATCH / DELETE | /email-triggers/:id | Get / update (`is_active` pauses) / delete (pending sends are skipped) | read / manage |
+| GET | /email-triggers/runs?status&deal_id&page&limit | Send history across all triggers | read |
+| GET | /email-triggers/:id/runs | Send history for one trigger | read |
+
+```json
+{
+  "name": "Proposal follow-up",
+  "event": "deal.stage_entered",
+  "stage_id": "<stage id>",
+  "template_id": "<template id>",
+  "recipient": "contact",
+  "delay_minutes": 1440,
+  "min_deal_value": 1000,
+  "is_active": true
+}
+```
+
+- `event`: `deal.stage_entered` (needs `stage_id`) · `deal.created` · `deal.won` · `deal.lost`. Optional `pipeline_id` limits the other events to one pipeline.
+- `recipient`: `contact` (the deal's contact; replies go to the deal owner) or `deal_owner` (an internal alert).
+- `delay_minutes`: 0 – 129600 (90 days). A delayed stage email is skipped if the deal has left that stage by the time it's due.
+- Fires from every way a deal is created or moved: the deals API, pipeline board, bulk stage moves and web-form leads. A deal re-entering the same stage doesn't get the email again.
+- Run statuses: `scheduled` → `sending` → `sent` | `skipped` (with reason) | `failed` (with error).
+
+---
+
+### Broadcasts
+
+Bulk email to contacts through Amazon SES, with per-contact history.
+
+**Access:** read = all roles · manage = admin only
+
+| Method | Endpoint | Description | Access |
+|--------|----------|-------------|--------|
+| GET | /broadcasts?status&search&page&limit | History with `stats { total, sent, failed, bounced, complained, skipped }` | read |
+| POST | /broadcasts | Create a draft: `{ name, template_id? , subject?, html?, preview_text?, audience }`. With `template_id` the subject/html are copied from the template | manage |
+| POST | /broadcasts/audience/preview | `{ audience }` → `{ count, opted_out, sample }` | read |
+| GET / PATCH / DELETE | /broadcasts/:id | Get with html / edit (draft or scheduled only) / delete (drafts only) | read / manage |
+| POST | /broadcasts/:id/send | Send now (`202`), or `{ scheduled_at: ISO date-time }` to schedule | manage |
+| POST | /broadcasts/:id/cancel | Stop a scheduled or sending broadcast; queued recipients are skipped | manage |
+| POST | /broadcasts/:id/test | Send to yourself with sample data | manage |
+| GET | /broadcasts/:id/recipients?status&search&page&limit | Per-contact status: `queued`, `sending`, `sent`, `failed`, `bounced`, `complained`, `skipped` | read |
+
+**Audience:** `{ "all": true }`, or filters that must all match: `tags` (any of), `temperature` (`hot`/`warm`/`cold`), `owner_ids`, `company_ids`. `contact_ids` sends to exactly those contacts. Contacts without an email, or who unsubscribed, bounced or complained, are always excluded. Recipients are snapshotted when sending starts; each email address gets one copy.
+
+**Statuses:** `draft` → `scheduled` → `sending` → `sent` | `cancelled` | `failed` (e.g. no eligible recipients).
+
+#### Opt-outs (public)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /public/email/unsubscribe?token= | Confirmation page linked from every email |
+| POST | /public/email/unsubscribe?token= | Opts the contact out (also RFC 8058 one-click from Gmail/Yahoo) |
+| POST | /api/webhooks/ses | SNS endpoint for SES events: hard bounces opt the address out in every org; complaints opt it out in the sending org |
+
+Contacts carry `email_opt_out`, `email_opt_out_reason` (`unsubscribed` / `bounced` / `complained`) and `email_opt_out_at`.
+
+#### Setup
+
+| Env var | Required | Description |
+|---------|----------|-------------|
+| `AWS_REGION` | yes | SES region, e.g. `us-east-1` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | yes (or an IAM role) | Needs `ses:SendEmail` |
+| `SES_FROM_EMAIL` | yes | Address on a verified SES domain, e.g. `hello@mail.yourapp.com` |
+| `SES_FROM_NAME` | no | Fallback sender name (the organization's name is used when known) |
+| `SES_CONFIGURATION_SET` | no | Configuration set whose event destination publishes Bounce + Complaint to SNS |
+| `SES_SNS_TOPIC_ARN` | no | When set, the webhook only accepts this topic |
+| `SES_MAX_SEND_RATE` | no | Emails/second (default 10; match your SES quota) |
+| `EMAIL_DISPATCH_INTERVAL_SECONDS` | no | Queue poll interval (default 30) |
+| `BACKEND_URL` | yes | Public API URL, used to build unsubscribe links |
+
+Without `AWS_REGION` and `SES_FROM_EMAIL` the server still starts: triggers keep queueing runs, and send endpoints return `503`. Point an SNS HTTPS subscription at `{BACKEND_URL}/api/webhooks/ses`; it confirms itself.
+
+---
+
 ### User Roles
 
 | Role | Permissions |

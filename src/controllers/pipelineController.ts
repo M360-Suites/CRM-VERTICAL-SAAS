@@ -8,6 +8,7 @@ import { User } from '../models/User';
 import { ApiResponse, AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { emitDealStageChanged } from '../services/socketService';
+import { queueDealTriggers } from '../services/triggerService';
 
 const isValidObjectId = (value: unknown): value is string =>
   typeof value === 'string' && mongoose.Types.ObjectId.isValid(value);
@@ -98,7 +99,7 @@ const formatDeal = (deal: {
     id: deal._id,
     title: deal.title,
     summary: deal.summary,
-    value: deal.value ?? null,
+    value: deal.value ?? 0,
     source: deal.source,
     industry: deal.industry,
     stage_id:
@@ -304,6 +305,8 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
       stage_changed_at: new Date()
     });
 
+    void queueDealTriggers({ organizationId, dealId: deal._id, stageId, isNew: true });
+
     const populatedDeal = await Deal.findById(deal._id).populate('company_id', 'name').lean();
     res.status(201).json({ status: true, message: 'Pipeline deal created successfully', data: populatedDeal ? formatDeal(populatedDeal) : deal });
   } catch (error) {
@@ -345,7 +348,7 @@ export const updatePipelineDeal = async (req: AuthRequest, res: Response): Promi
       update.title = title;
     }
 
-    if (body.value !== undefined) update.value = body.value;
+    if (body.value !== undefined) update.value = body.value ?? 0;
     if (body.source !== undefined) update.source = body.source;
     if (body.industry !== undefined) update.industry = body.industry;
 
@@ -414,6 +417,10 @@ export const updatePipelineDeal = async (req: AuthRequest, res: Response): Promi
       { $set: update },
       { new: true, runValidators: true }
     ).populate('company_id', 'name').lean();
+
+    if (deal && body.stage_id !== undefined) {
+      void queueDealTriggers({ organizationId, dealId: deal._id, stageId: body.stage_id });
+    }
 
     res.json({
       status: true,
@@ -511,6 +518,8 @@ export const movePipelineDealStage = async (req: AuthRequest, res: Response): Pr
         userId: req.user.id
       });
     }
+
+    if (deal) void queueDealTriggers({ organizationId, dealId: deal._id, stageId: stage_id });
 
     res.json(deal ? formatDeal(deal) : null);
   } catch (error) {

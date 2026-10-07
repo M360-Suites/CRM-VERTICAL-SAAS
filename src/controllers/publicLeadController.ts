@@ -14,6 +14,7 @@ import { PublicKeyRequest } from '../middleware/publicAuth';
 import { routeNewLead } from '../services/leadRoutingService';
 import { LEAD_VALUE_FIELDS, parseLeadValue } from '../utils/leadValue';
 import { ensureRevopsDefaults } from '../services/revopsDefaults';
+import { queueDealTriggers } from '../services/triggerService';
 
 interface LeadCaptureBody {
   name?: string;
@@ -233,8 +234,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       deal = await Deal.create({
         title: dealTitle,
         summary,
-        // Only set when the form sent a usable budget/value — unknown stays unset, never 0
-        ...(dealValue !== undefined ? { value: dealValue } : {}),
+        // The form's budget/value when usable, otherwise the deal lands at 0
+        value: dealValue ?? 0,
         ...(currency ? { currency } : {}),
         status: 'open',
         contact_id: contact._id,
@@ -245,6 +246,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         stage_id: leadStage?._id,
         stage_changed_at: new Date()
       });
+      void queueDealTriggers({ organizationId: organization._id as mongoose.Types.ObjectId, dealId: deal._id, stageId: leadStage?._id, isNew: true });
     } catch (dealError) {
       logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
     }
@@ -294,7 +296,7 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         email: contact.email,
         deal_id: deal?._id ?? null,
         deal_title: dealTitle,
-        deal_value: deal?.value ?? null
+        deal_value: deal ? deal.value ?? 0 : null
       }
     });
   } catch (error) {

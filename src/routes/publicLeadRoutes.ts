@@ -96,6 +96,15 @@ const router: RouterType = Router();
  *                 type: string
  *               ttclid:
  *                 type: string
+ *               customFields:
+ *                 type: object
+ *                 additionalProperties: true
+ *                 description: |
+ *                   Any extra form inputs (alias custom_fields). Stored as `custom_fields` on both the contact and the deal.
+ *                   Unrecognised top-level keys are also collected here so no submitted data is lost.
+ *                   A budget/value key inside it becomes the deal value when no top-level value is sent.
+ *                   Limits: 50 keys, 3 levels of nesting, 5000 chars per string; keys starting with `$` or containing `.` are dropped.
+ *                 example: { propertyType: Apartment, budget: 50000000, preferredLocation: Lekki, bedrooms: 3 }
  *     responses:
  *       201:
  *         description: Lead captured successfully

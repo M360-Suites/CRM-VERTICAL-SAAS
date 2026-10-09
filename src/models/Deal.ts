@@ -28,6 +28,8 @@ export interface IDeal extends Document {
   stage_changed_at?: Date;
   stale_reminder_sent_at?: Date;
   stale_reminder_escalated_at?: Date;
+  /** Extra form inputs captured from public lead forms */
+  custom_fields?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -59,7 +61,8 @@ const DealSchema = new Schema<IDeal>(
     organization_id: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
     stage_changed_at: { type: Date },
     stale_reminder_sent_at: { type: Date },
-    stale_reminder_escalated_at: { type: Date }
+    stale_reminder_escalated_at: { type: Date },
+    custom_fields: { type: Schema.Types.Mixed, default: {} }
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

@@ -15,6 +15,7 @@ import { routeNewLead } from '../services/leadRoutingService';
 import { LEAD_VALUE_FIELDS, parseLeadValue } from '../utils/leadValue';
 import { ensureRevopsDefaults } from '../services/revopsDefaults';
 import { queueDealTriggers } from '../services/triggerService';
+import { extractCustomFields } from '../utils/customFields';
 
 interface LeadCaptureBody {
   name?: string;
@@ -29,10 +30,60 @@ interface LeadCaptureBody {
   source?: string;
   temperature?: 'hot' | 'warm' | 'cold';
   tags?: string | string[];
+  customFields?: Record<string, unknown>;
+  custom_fields?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
 const LEAD_STAGE_NAME = 'Lead';
+
+const FIRST_NAME_FIELDS = ['first_name', 'firstname', 'firstName', 'first', 'First Name'];
+const LAST_NAME_FIELDS = ['last_name', 'lastname', 'lastName', 'last', 'Last Name'];
+const FULL_NAME_FIELDS = [
+  'name',
+  'full_name',
+  'fullname',
+  'fullName',
+  'full name',
+  'FullName',
+  'Name',
+  'FULL_NAME',
+  'FULLNAME',
+  'FULL NAME'
+];
+
+/** Every top-level key mapped to a first-class field; anything else lands in custom_fields */
+const KNOWN_LEAD_FIELDS = [
+  'key',
+  'site',
+  'domain',
+  'email',
+  'phone',
+  'company',
+  'message',
+  'summary',
+  'source',
+  'temperature',
+  'tags',
+  'currency',
+  'intent_score',
+  'intentScore',
+  'region',
+  'tier',
+  'platform',
+  'utm_source',
+  'utm_medium',
+  'gclid',
+  'gbraid',
+  'wbraid',
+  'fbclid',
+  'li_fat_id',
+  'ttclid',
+  ...LEAD_VALUE_FIELDS,
+  ...FIRST_NAME_FIELDS,
+  ...LAST_NAME_FIELDS,
+  ...FULL_NAME_FIELDS
+];
 
 const toObjectId = (id: string) => new mongoose.Types.ObjectId(id);
 
@@ -51,6 +102,7 @@ const notifyAdminsOfNewLead = async (
     phone?: string;
     source?: string;
     company?: string;
+    custom_fields?: Record<string, unknown>;
   }
 ): Promise<void> => {
   try {
@@ -86,7 +138,8 @@ const notifyAdminsOfNewLead = async (
           email: lead.email || null,
           phone: lead.phone || null,
           source: lead.source || 'web-capture',
-          company: lead.company || null
+          company: lead.company || null,
+          custom_fields: lead.custom_fields ?? {}
         }
       }))
     );
@@ -154,7 +207,16 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     const source = pick<string>('source');
     const temperature = pick<'hot' | 'warm' | 'cold'>('temperature');
     const rawTags = pick<string | string[]>('tags');
-    const dealValue = parseLeadValue(pick<unknown>(...LEAD_VALUE_FIELDS));
+    const customFields = extractCustomFields(body, KNOWN_LEAD_FIELDS);
+    const pickCustom = (keys: string[]): unknown => {
+      for (const key of keys) {
+        const value = customFields[key];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+      return undefined;
+    };
+    // A budget sent inside customFields still becomes the deal value when no top-level value is given
+    const dealValue = parseLeadValue(pick<unknown>(...LEAD_VALUE_FIELDS) ?? pickCustom(LEAD_VALUE_FIELDS));
     const rawCurrency = pick<string>('currency');
     const currency = typeof rawCurrency === 'string' && /^[a-z]{3}$/i.test(rawCurrency.trim())
       ? rawCurrency.trim().toUpperCase()
@@ -166,22 +228,11 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         ? String(rawTags).split(',').map((tag) => tag.trim()).filter(Boolean)
         : [];
 
-    let first_name = pick<string>('first_name', 'firstname', 'firstName', 'first', 'First Name');
-    let last_name = pick<string>('last_name', 'lastname', 'lastName', 'last', 'Last Name');
+    let first_name = pick<string>(...FIRST_NAME_FIELDS);
+    let last_name = pick<string>(...LAST_NAME_FIELDS);
 
     if (!first_name || !last_name) {
-      const fullNameCandidate = pick<string>(
-        'name',
-        'full_name',
-        'fullname',
-        'fullName',
-        'full name',
-        'FullName',
-        'Name',
-        'FULL_NAME',
-        'FULLNAME',
-        'FULL NAME'
-      );
+      const fullNameCandidate = pick<string>(...FULL_NAME_FIELDS);
 
       logger.info({ fullNameCandidate, first_name, last_name }, 'Public lead capture — resolved name fields');
 
@@ -209,7 +260,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       phone,
       organization_id: organization._id,
       temperature: temperature || 'warm',
-      tags: [...new Set(['web-capture', source || 'script-tag', ...customTags])]
+      tags: [...new Set(['web-capture', source || 'script-tag', ...customTags])],
+      custom_fields: customFields
     });
 
     const dealTitle = await generateLeadTitle({
@@ -244,7 +296,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         source: source || 'web-capture',
         description: message,
         stage_id: leadStage?._id,
-        stage_changed_at: new Date()
+        stage_changed_at: new Date(),
+        custom_fields: customFields
       });
       void queueDealTriggers({ organizationId: organization._id as mongoose.Types.ObjectId, dealId: deal._id, stageId: leadStage?._id, isNew: true });
     } catch (dealError) {
@@ -283,7 +336,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       email: contact.email,
       phone: contact.phone,
       source: source || 'web-capture',
-      company
+      company,
+      custom_fields: customFields
     });
 
     res.status(201).json({
@@ -296,7 +350,8 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
         email: contact.email,
         deal_id: deal?._id ?? null,
         deal_title: dealTitle,
-        deal_value: deal ? deal.value ?? 0 : null
+        deal_value: deal ? deal.value ?? 0 : null,
+        custom_fields: customFields
       }
     });
   } catch (error) {

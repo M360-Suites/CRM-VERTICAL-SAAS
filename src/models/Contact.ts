@@ -52,6 +52,8 @@ export interface IContact extends Document {
   email_opt_out: boolean;
   email_opt_out_reason?: EmailOptOutReason;
   email_opt_out_at?: Date;
+  /** Extra form inputs captured from public lead forms */
+  custom_fields?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -95,7 +97,8 @@ const ContactSchema = new Schema<IContact>(
     },
     email_opt_out: { type: Boolean, default: false },
     email_opt_out_reason: { type: String, enum: ['unsubscribed', 'bounced', 'complained'] },
-    email_opt_out_at: { type: Date }
+    email_opt_out_at: { type: Date },
+    custom_fields: { type: Schema.Types.Mixed, default: {} }
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

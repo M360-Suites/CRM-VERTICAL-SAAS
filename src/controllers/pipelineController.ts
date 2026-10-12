@@ -87,6 +87,7 @@ const formatDeal = (deal: {
   stage_id?: unknown;
   company_id?: unknown;
   stage_changed_at?: Date;
+  custom_fields?: Record<string, unknown>;
   created_at?: Date;
   updated_at?: Date;
 }) => {
@@ -113,6 +114,7 @@ const formatDeal = (deal: {
         }
       : null,
     stage_changed_at: deal.stage_changed_at,
+    custom_fields: deal.custom_fields ?? {},
     created_at: deal.created_at,
     updated_at: deal.updated_at
   };

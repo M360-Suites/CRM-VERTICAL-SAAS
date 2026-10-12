@@ -52,14 +52,17 @@ const FULL_NAME_FIELDS = [
   'FULL NAME'
 ];
 
-/** Every top-level key mapped to a first-class field; anything else lands in custom_fields */
+/**
+ * Every top-level key persisted on a first-class field (contact, deal or contact.routing);
+ * anything else lands in custom_fields. Keys that are only read (company, utm_*, click ids)
+ * stay out of this list so they are kept as custom fields rather than dropped.
+ */
 const KNOWN_LEAD_FIELDS = [
   'key',
   'site',
   'domain',
   'email',
   'phone',
-  'company',
   'message',
   'summary',
   'source',
@@ -71,14 +74,6 @@ const KNOWN_LEAD_FIELDS = [
   'region',
   'tier',
   'platform',
-  'utm_source',
-  'utm_medium',
-  'gclid',
-  'gbraid',
-  'wbraid',
-  'fbclid',
-  'li_fat_id',
-  'ttclid',
   ...LEAD_VALUE_FIELDS,
   ...FIRST_NAME_FIELDS,
   ...LAST_NAME_FIELDS,

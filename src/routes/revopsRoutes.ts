@@ -112,6 +112,12 @@ router.get('/connectors', listConnectors);
 /**
  * @swagger
  * /revops/connectors/{id}/status:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   patch:
  *     tags: [Revenue Ops]
  *     summary: Mark a manual connector connected / disconnected / error (admin, sales_manager)
@@ -193,6 +199,12 @@ router.post('/campaigns', MANAGE, logCampaignSpend);
 /**
  * @swagger
  * /revops/campaigns/{id}:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   delete:
  *     tags: [Revenue Ops]
  *     summary: Delete a spend row (admin, sales_manager)
@@ -259,6 +271,12 @@ router.post('/routing-rules/simulate', simulateRouting);
 /**
  * @swagger
  * /revops/routing-rules/{id}:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   patch:
  *     tags: [Revenue Ops]
  *     summary: Update a rule, including is_active to pause/resume (admin, sales_manager)

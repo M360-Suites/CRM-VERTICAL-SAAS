@@ -91,6 +91,12 @@ router.get('/runs', listTriggerRuns);
 /**
  * @swagger
  * /email-triggers/{id}:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   get:
  *     tags: [Email Triggers]
  *     summary: Get a trigger
@@ -114,6 +120,12 @@ router.delete('/:id', MANAGE, deleteTrigger);
 /**
  * @swagger
  * /email-triggers/{id}/runs:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   get:
  *     tags: [Email Triggers]
  *     summary: Send history for one trigger

@@ -100,6 +100,12 @@ router.post('/audience/preview', previewAudience);
 /**
  * @swagger
  * /broadcasts/{id}:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   get:
  *     tags: [Broadcasts]
  *     summary: Get a broadcast with html and stats
@@ -123,6 +129,12 @@ router.delete('/:id', MANAGE, deleteBroadcast);
 /**
  * @swagger
  * /broadcasts/{id}/send:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   post:
  *     tags: [Broadcasts]
  *     summary: Send now, or schedule with scheduled_at (admin)
@@ -141,6 +153,12 @@ router.post('/:id/send', MANAGE, sendBroadcast);
 /**
  * @swagger
  * /broadcasts/{id}/cancel:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   post:
  *     tags: [Broadcasts]
  *     summary: Cancel a scheduled or in-progress broadcast (admin)
@@ -152,6 +170,12 @@ router.post('/:id/cancel', MANAGE, cancelBroadcastHandler);
 /**
  * @swagger
  * /broadcasts/{id}/test:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   post:
  *     tags: [Broadcasts]
  *     summary: Send the broadcast to yourself with sample merge data
@@ -163,6 +187,12 @@ router.post('/:id/test', MANAGE, sendTestBroadcast);
 /**
  * @swagger
  * /broadcasts/{id}/recipients:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   get:
  *     tags: [Broadcasts]
  *     summary: Per-contact delivery history

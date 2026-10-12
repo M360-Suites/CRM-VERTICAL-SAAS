@@ -54,7 +54,7 @@ router.use(authenticate);
  *               name: { type: string }
  *               subject: { type: string, example: "Thanks for your interest, {{contact.first_name | there}}" }
  *               preview_text: { type: string }
- *               html: { type: string, description: Rendered canvas HTML. Merge tags like {{contact.first_name}} are filled at send time. }
+ *               html: { type: string, description: "Rendered canvas HTML. Merge tags like {{contact.first_name}} are filled at send time." }
  *               design: { type: object, description: The canvas editor's own JSON, stored as-is so the editor can reload it }
  */
 router.get('/', listTemplates);
@@ -95,6 +95,12 @@ router.post('/preview', previewTemplate);
 /**
  * @swagger
  * /email-templates/{id}:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   get:
  *     tags: [Email Templates]
  *     summary: Get a template with html and design
@@ -118,6 +124,12 @@ router.delete('/:id', MANAGE, deleteTemplate);
 /**
  * @swagger
  * /email-templates/{id}/duplicate:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   post:
  *     tags: [Email Templates]
  *     summary: Copy a template (admin)
@@ -129,6 +141,12 @@ router.post('/:id/duplicate', MANAGE, duplicateTemplate);
 /**
  * @swagger
  * /email-templates/{id}/test:
+ *   parameters:
+ *     - in: path
+ *       name: id
+ *       required: true
+ *       schema:
+ *         type: string
  *   post:
  *     tags: [Email Templates]
  *     summary: Send the template to yourself with sample merge data

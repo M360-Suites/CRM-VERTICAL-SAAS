@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types';
-import { Organization } from '../models/Organization';
+import { ASSIGNMENT_MODES, AssignmentMode, Organization } from '../models/Organization';
 import { generateApiKeys } from '../utils/apiKeys';
 import { requireOrganization } from '../utils/tenant';
 
@@ -167,5 +167,67 @@ export const revokeKey = async (req: AuthRequest, res: Response): Promise<void> 
       status: false,
       message: 'Failed to revoke key'
     });
+  }
+};
+
+/**
+ * Get the organization's lead assignment mode (auto or manual)
+ */
+export const getAssignmentSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const organization = await Organization.findById(organizationId).select('assignment_mode').lean();
+    if (!organization) {
+      res.status(404).json({ status: false, message: 'Organization not found' });
+      return;
+    }
+
+    res.json({
+      status: true,
+      message: 'Assignment settings retrieved successfully',
+      data: { assignment_mode: organization.assignment_mode ?? 'auto' }
+    });
+  } catch (error) {
+    console.error('Get assignment settings error:', error);
+    res.status(500).json({ status: false, message: 'Failed to retrieve assignment settings' });
+  }
+};
+
+/**
+ * Switch lead assignment between auto and manual. Admin only.
+ */
+export const updateAssignmentSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { assignment_mode } = (req.body ?? {}) as { assignment_mode?: unknown };
+    if (!ASSIGNMENT_MODES.includes(assignment_mode as AssignmentMode)) {
+      res.status(400).json({ status: false, message: "assignment_mode must be 'auto' or 'manual'" });
+      return;
+    }
+
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const organization = await Organization.findByIdAndUpdate(
+      organizationId,
+      { $set: { assignment_mode } },
+      { new: true, runValidators: true }
+    )
+      .select('assignment_mode')
+      .lean();
+    if (!organization) {
+      res.status(404).json({ status: false, message: 'Organization not found' });
+      return;
+    }
+
+    res.json({
+      status: true,
+      message: 'Assignment settings updated successfully',
+      data: { assignment_mode: organization.assignment_mode }
+    });
+  } catch (error) {
+    console.error('Update assignment settings error:', error);
+    res.status(500).json({ status: false, message: 'Failed to update assignment settings' });
   }
 };

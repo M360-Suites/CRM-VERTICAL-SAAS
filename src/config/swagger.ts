@@ -76,6 +76,7 @@ const options: swaggerJsdoc.Options = {
             slug: { type: 'string' },
             owner_id: { type: 'string', nullable: true },
             is_active: { type: 'boolean' },
+            assignment_mode: { type: 'string', enum: ['auto', 'manual'], description: 'How new inbound leads get an owner' },
             created_at: { type: 'string', format: 'date-time' },
             updated_at: { type: 'string', format: 'date-time' },
           },

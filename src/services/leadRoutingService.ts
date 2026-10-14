@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Contact, IContact, RoutingMode } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { User } from '../models/User';
+import { Organization } from '../models/Organization';
 import { Notification } from '../models/Notification';
 import { RoutingRule } from '../models/RoutingRule';
 import { AD_PLATFORMS, AdPlatform } from '../models/AdConnector';
@@ -137,8 +138,9 @@ export interface RoutingOutcome {
 /**
  * The Revenue Engine lead pipeline, run inline right after a lead is captured:
  * score → match rule → assign owner (rule assignee, else least-loaded rep) →
- * stamp routing on the contact → notify owner. Notification is best effort;
- * routing never fails capture.
+ * stamp routing on the contact → notify owner. When the organization's
+ * assignment_mode is 'manual', no owner is picked and the lead stays unassigned.
+ * Notification is best effort; routing never fails capture.
  */
 export const routeNewLead = async (
   contact: IContact,
@@ -154,13 +156,19 @@ export const routeNewLead = async (
     .lean();
   const rule = matchRoutingRule(rules, { region: signals.region, tier: signals.tier, platform, intent_score: intentScore });
 
-  let ownerId: mongoose.Types.ObjectId | null = (contact.owner_id as mongoose.Types.ObjectId | undefined) ?? null;
-  if (!ownerId && rule?.assignee_id && (await isActiveRep(organizationId, rule.assignee_id))) {
-    ownerId = rule.assignee_id as mongoose.Types.ObjectId;
-  }
-  if (!ownerId) ownerId = await pickLeastLoadedRep(organizationId);
+  const organization = await Organization.findById(organizationId).select('assignment_mode').lean();
+  const manual = organization?.assignment_mode === 'manual';
 
-  const mode: RoutingMode = rule ? 'rule' : ownerId ? 'balanced' : 'unassigned';
+  let ownerId: mongoose.Types.ObjectId | null = (contact.owner_id as mongoose.Types.ObjectId | undefined) ?? null;
+  if (!manual) {
+    if (!ownerId && rule?.assignee_id && (await isActiveRep(organizationId, rule.assignee_id))) {
+      ownerId = rule.assignee_id as mongoose.Types.ObjectId;
+    }
+    if (!ownerId) ownerId = await pickLeastLoadedRep(organizationId);
+  }
+
+  // Manual mode still scores and stamps the lead; it just waits for someone to assign it
+  const mode: RoutingMode = manual ? 'manual' : rule ? 'rule' : ownerId ? 'balanced' : 'unassigned';
   const routing = {
     intent_score: intentScore,
     region: signals.region,

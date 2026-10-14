@@ -12,7 +12,7 @@ import mongoose, { Document, Schema } from 'mongoose';
  */
 export type Temperature = 'hot' | 'warm' | 'cold';
 
-export type RoutingMode = 'rule' | 'balanced' | 'unassigned';
+export type RoutingMode = 'rule' | 'balanced' | 'unassigned' | 'manual';
 
 /** Why a contact no longer receives marketing/automated email */
 export type EmailOptOutReason = 'unsubscribed' | 'bounced' | 'complained';
@@ -89,7 +89,7 @@ const ContactSchema = new Schema<IContact>(
           source: { type: String },
           rule_id: { type: Schema.Types.ObjectId, ref: 'RoutingRule' },
           rule_name: { type: String },
-          mode: { type: String, enum: ['rule', 'balanced', 'unassigned'] },
+          mode: { type: String, enum: ['rule', 'balanced', 'unassigned', 'manual'] },
           routed_at: { type: Date }
         },
         { _id: false }

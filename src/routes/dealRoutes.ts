@@ -10,7 +10,8 @@ import {
   getDealTasks,
   getDealStats,
   updateDealStage,
-  bulkUpdateStage
+  bulkUpdateStage,
+  assignDeal
 } from '../controllers/dealController';
 import { authenticate, authorize } from '../middleware/auth';
 
@@ -56,6 +57,7 @@ router.use(authenticate);
  *           type: string
  *       - in: query
  *         name: owner_id
+ *         description: Filter by owner user ID, or pass `unassigned` to list deals with no owner
  *         schema:
  *           type: string
  *       - in: query
@@ -215,6 +217,52 @@ router.get('/:id', getDealById);
  *         description: Deal updated successfully
  */
 router.patch('/:id', authorize('admin', 'sales_manager', 'sales_rep'), updateDeal);
+
+/**
+ * @swagger
+ * /deals/{id}/assign:
+ *   patch:
+ *     summary: Assign a deal to a person
+ *     description: |
+ *       Sets the single owner of a deal, or clears it with `owner_id: null`. Admins and sales managers only.
+ *       The owner must be an active admin, sales manager or sales rep in the same organization.
+ *       If the deal's contact has no owner yet, it gets the same owner. A `deal_assigned` activity is
+ *       logged and the new owner gets an in-app notification. `owner_id` cannot be changed through PATCH /deals/{id}.
+ *     tags: [Deals]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [owner_id]
+ *             properties:
+ *               owner_id:
+ *                 type: string
+ *                 nullable: true
+ *                 description: User ID of the new owner, or null to unassign
+ *           example:
+ *             owner_id: 507f1f77bcf86cd799439011
+ *     responses:
+ *       200:
+ *         description: Deal assigned (or unassigned); returns the updated deal
+ *       400:
+ *         description: Invalid deal ID / owner_id, or the user cannot own deals
+ *       403:
+ *         description: Only admins and sales managers can assign deals
+ *       404:
+ *         description: Deal not found
+ */
+router.patch('/:id/assign', authorize('admin', 'sales_manager'), assignDeal);
 
 /**
  * @swagger

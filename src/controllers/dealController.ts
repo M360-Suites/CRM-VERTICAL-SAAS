@@ -9,6 +9,7 @@ import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
+import { assignDealOwner } from '../services/dealAssignmentService';
 
 interface DealQuery {
   page?: number;
@@ -57,7 +58,8 @@ export const listDeals = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     if (company_id) query.company_id = new mongoose.Types.ObjectId(company_id);
-    if (owner_id) query.owner_id = new mongoose.Types.ObjectId(owner_id);
+    if (owner_id === 'unassigned') query.owner_id = null;
+    else if (owner_id) query.owner_id = new mongoose.Types.ObjectId(owner_id);
     if (stage_id) query.stage_id = new mongoose.Types.ObjectId(stage_id);
     if (status) query.status = status;
 
@@ -304,6 +306,9 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     const updateObj: Record<string, unknown> = { ...updateData };
+    // Ownership changes go through PATCH /deals/:id/assign; tenancy never changes
+    delete updateObj.owner_id;
+    delete updateObj.organization_id;
 
     if ('value' in updateData && (updateData.value === null || updateData.value === undefined)) {
       updateObj.value = 0;
@@ -834,5 +839,47 @@ export const bulkUpdateStage = async (req: AuthRequest, res: Response): Promise<
       status: false,
       message: 'Failed to update deals'
     });
+  }
+};
+
+/**
+ * Assign a deal to one person, or unassign it with owner_id: null.
+ * Route is restricted to admins and sales managers.
+ */
+export const assignDeal = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params as { id: string };
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ status: false, message: 'Invalid deal ID' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { owner_id?: unknown };
+    if (!('owner_id' in body)) {
+      res.status(400).json({ status: false, message: 'owner_id is required (use null to unassign)' });
+      return;
+    }
+    const ownerId = body.owner_id;
+    if (ownerId !== null && (typeof ownerId !== 'string' || !mongoose.Types.ObjectId.isValid(ownerId))) {
+      res.status(400).json({ status: false, message: 'Invalid owner_id' });
+      return;
+    }
+
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    const result = await assignDealOwner({ organizationId, dealId: id, ownerId, actorId: req.user?.id });
+    if (!result.ok) {
+      res.status(result.status).json({ status: false, message: result.message });
+      return;
+    }
+
+    res.json({
+      status: true,
+      message: result.deal.owner_id ? 'Deal assigned successfully' : 'Deal unassigned successfully',
+      data: result.deal
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: 'Failed to assign deal' });
   }
 };

@@ -107,28 +107,24 @@ router.post('/api-keys/revoke', authorize('admin'), revokeKey);
  *   get:
  *     tags: [Organization]
  *     summary: Get lead assignment mode
- *     description: |
- *       Returns the organization-wide switch for how new inbound leads (web forms, ads) get an owner.
- *       `auto` = routing rules first, then the least-loaded rep. `manual` = leads arrive unassigned
- *       until an admin or sales manager assigns them with PATCH /deals/{id}/assign.
+ *     description: Returns whether new inbound leads are assigned automatically or left unassigned for manual assignment
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Current mode
- *         content:
- *           application/json:
- *             example:
- *               status: true
- *               message: Assignment settings retrieved successfully
- *               data:
- *                 assignment_mode: auto
+ *         description: Assignment settings retrieved
  *       401:
  *         description: Unauthorized
+ */
+router.get('/assignment-settings', getAssignmentSettings);
+
+/**
+ * @swagger
+ * /org/assignment-settings:
  *   patch:
  *     tags: [Organization]
- *     summary: Switch lead assignment between auto and manual
- *     description: Admin only. Affects leads captured after the change; existing owners are left as they are.
+ *     summary: Update lead assignment mode
+ *     description: Switches lead assignment between auto and manual. Admin only.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -142,17 +138,17 @@ router.post('/api-keys/revoke', authorize('admin'), revokeKey);
  *               assignment_mode:
  *                 type: string
  *                 enum: [auto, manual]
+ *                 description: auto = routing rules then least-loaded rep, manual = leads stay unassigned
  *     responses:
  *       200:
- *         description: Mode updated
+ *         description: Assignment settings updated
  *       400:
- *         description: assignment_mode is not auto or manual
+ *         description: Invalid assignment_mode
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden (admins only)
+ *         description: Forbidden
  */
-router.get('/assignment-settings', getAssignmentSettings);
 router.patch('/assignment-settings', authorize('admin'), updateAssignmentSettings);
 
 export default router;

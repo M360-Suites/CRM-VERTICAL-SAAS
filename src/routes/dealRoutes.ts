@@ -222,12 +222,7 @@ router.patch('/:id', authorize('admin', 'sales_manager', 'sales_rep'), updateDea
  * @swagger
  * /deals/{id}/assign:
  *   patch:
- *     summary: Assign a deal to a person
- *     description: |
- *       Sets the single owner of a deal, or clears it with `owner_id: null`. Admins and sales managers only.
- *       The owner must be an active admin, sales manager or sales rep in the same organization.
- *       If the deal's contact has no owner yet, it gets the same owner. A `deal_assigned` activity is
- *       logged and the new owner gets an in-app notification. `owner_id` cannot be changed through PATCH /deals/{id}.
+ *     summary: Assign a deal to a user
  *     tags: [Deals]
  *     security:
  *       - cookieAuth: []
@@ -249,16 +244,10 @@ router.patch('/:id', authorize('admin', 'sales_manager', 'sales_rep'), updateDea
  *               owner_id:
  *                 type: string
  *                 nullable: true
- *                 description: User ID of the new owner, or null to unassign
- *           example:
- *             owner_id: 507f1f77bcf86cd799439011
+ *                 description: ID of the user to assign, or null to unassign
  *     responses:
  *       200:
- *         description: Deal assigned (or unassigned); returns the updated deal
- *       400:
- *         description: Invalid deal ID / owner_id, or the user cannot own deals
- *       403:
- *         description: Only admins and sales managers can assign deals
+ *         description: Deal assigned successfully
  *       404:
  *         description: Deal not found
  */

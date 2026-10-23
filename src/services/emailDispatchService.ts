@@ -2,10 +2,11 @@
  * Email dispatcher — a Mongo-backed queue worker for broadcasts and triggers.
  * Every tick it starts due scheduled broadcasts, sends due trigger runs first
  * (they're time-sensitive), then works through broadcast recipients,
- * throttled to SES_MAX_SEND_RATE emails/second.
+ * throttled to EMAIL_MAX_SEND_RATE emails/second. A Sender.net 429
+ * ends the tick; the email goes back in the queue.
  */
 import config from '../config';
-import { isSesConfigured } from '../config/ses';
+import { isSenderConfigured, isSenderRateLimited } from '../utils/senderMailer';
 import { logger } from '../config/logger';
 import { TriggerRun } from '../models/TriggerRun';
 import { BroadcastRecipient } from '../models/BroadcastRecipient';
@@ -51,19 +52,19 @@ export const runEmailDispatch = async (): Promise<void> => {
   try {
     // Leave headroom so one tick finishes before the next is due
     const deadline = Date.now() + config.EMAIL_DISPATCH_INTERVAL_SECONDS * 1000 * 0.8;
-    const gapMs = Math.ceil(1000 / config.SES_MAX_SEND_RATE);
+    const gapMs = Math.ceil(1000 / config.EMAIL_MAX_SEND_RATE);
 
     await failInterruptedSends();
     await startDueScheduledBroadcasts();
 
-    while (Date.now() < deadline) {
+    while (Date.now() < deadline && !isSenderRateLimited()) {
       const run = await claimDueTriggerRun();
       if (!run) break;
       await processTriggerRun(run);
       await pause(gapMs);
     }
 
-    while (Date.now() < deadline) {
+    while (Date.now() < deadline && !isSenderRateLimited()) {
       const sent = await sendNextBroadcastRecipient();
       if (!sent) break;
       await pause(gapMs);
@@ -78,8 +79,8 @@ export const runEmailDispatch = async (): Promise<void> => {
 export const startEmailDispatchService = (): void => {
   if (dispatchTimer) return;
 
-  if (!isSesConfigured()) {
-    logger.warn('Amazon SES not configured (AWS_REGION / SES_FROM_EMAIL) — broadcasts and email triggers will queue but not send');
+  if (!isSenderConfigured()) {
+    logger.warn('Sender.net not configured (SENDER_API_TOKEN / SENDER_FROM_EMAIL) — broadcasts and email triggers will queue but not send');
     return;
   }
 
@@ -92,7 +93,7 @@ export const startEmailDispatchService = (): void => {
     void runEmailDispatch();
   }, config.EMAIL_DISPATCH_INTERVAL_SECONDS * 1000);
 
-  logger.info(`Email dispatcher started (every ${config.EMAIL_DISPATCH_INTERVAL_SECONDS}s, ${config.SES_MAX_SEND_RATE}/s)`);
+  logger.info(`Email dispatcher started (every ${config.EMAIL_DISPATCH_INTERVAL_SECONDS}s, ${config.EMAIL_MAX_SEND_RATE}/s)`);
 };
 
 export const stopEmailDispatchService = (): void => {

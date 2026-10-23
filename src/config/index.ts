@@ -57,13 +57,12 @@ const config = {
   GOOGLE_ADS_API_VERSION: process.env.GOOGLE_ADS_API_VERSION || 'v25',
   MIDLINE_API_KEY: process.env.MIDLINE_API_KEY,
   MIDLINE_SERVICE_NAME: process.env.MIDLINE_SERVICE_NAME ?? 'crm-backend',
-  /** Amazon SES — broadcasts and email triggers. Credentials come from the standard AWS env/role chain. */
-  AWS_REGION: process.env.AWS_REGION ?? process.env.SES_REGION,
-  SES_FROM_EMAIL: process.env.SES_FROM_EMAIL,
-  SES_FROM_NAME: process.env.SES_FROM_NAME,
-  SES_CONFIGURATION_SET: process.env.SES_CONFIGURATION_SET,
-  SES_SNS_TOPIC_ARN: process.env.SES_SNS_TOPIC_ARN,
-  SES_MAX_SEND_RATE: Number(process.env.SES_MAX_SEND_RATE) > 0 ? Number(process.env.SES_MAX_SEND_RATE) : 10,
+  /** Sender.net — broadcasts and email triggers */
+  SENDER_API_TOKEN: process.env.SENDER_API_TOKEN,
+  SENDER_FROM_EMAIL: process.env.SENDER_FROM_EMAIL,
+  SENDER_FROM_NAME: process.env.SENDER_FROM_NAME,
+  SENDER_WEBHOOK_SECRET: process.env.SENDER_WEBHOOK_SECRET,
+  EMAIL_MAX_SEND_RATE: Number(process.env.EMAIL_MAX_SEND_RATE) > 0 ? Number(process.env.EMAIL_MAX_SEND_RATE) : 5,
   EMAIL_DISPATCH_INTERVAL_SECONDS:
     Number(process.env.EMAIL_DISPATCH_INTERVAL_SECONDS) > 0 ? Number(process.env.EMAIL_DISPATCH_INTERVAL_SECONDS) : 30
 };

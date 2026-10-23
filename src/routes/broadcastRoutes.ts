@@ -24,7 +24,7 @@ router.use(authenticate);
  * @swagger
  * tags:
  *   - name: Broadcasts
- *     description: Bulk email to contacts through Amazon SES, with send history
+ *     description: Bulk email to contacts through Sender.net, with send history
  */
 
 /**

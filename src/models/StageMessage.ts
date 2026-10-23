@@ -1,7 +1,7 @@
 /**
  * StageMessage model for internal stage discussion
  * Flat comment/chat thread attached to a pipeline stage
- * Only users assigned to the stage can read and post
+ * Stage assignees and users mentioned in the thread can read and post
  */
 import mongoose, { Document, Schema } from 'mongoose';
 
@@ -14,6 +14,8 @@ export interface IStageMessage extends Document {
   organization_id: mongoose.Types.ObjectId;
   sender_id: mongoose.Types.ObjectId;
   content: string;
+  /** Users @mentioned in the message — they're notified and can open the thread */
+  mentions: mongoose.Types.ObjectId[];
   edited: boolean;
   created_at: Date;
   updated_at: Date;
@@ -34,6 +36,7 @@ const StageMessageSchema = new Schema<IStageMessage>(
       trim: true,
       maxlength: [5000, 'Message cannot exceed 5000 characters']
     },
+    mentions: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     edited: { type: Boolean, default: false }
   },
   {
@@ -43,5 +46,6 @@ const StageMessageSchema = new Schema<IStageMessage>(
 
 StageMessageSchema.index({ stage_id: 1, created_at: 1 });
 StageMessageSchema.index({ organization_id: 1, created_at: -1 });
+StageMessageSchema.index({ stage_id: 1, mentions: 1 });
 
 export const StageMessage = mongoose.model<IStageMessage>('StageMessage', StageMessageSchema);

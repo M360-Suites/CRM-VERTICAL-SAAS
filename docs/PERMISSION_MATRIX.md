@@ -112,7 +112,7 @@
 | Delete own message | ✅ | ✅ | ✅ | ❌ |
 | Edit/delete any message | ✅ | ✅ | ❌ | ❌ |
 
-> **Note:** A Sales Rep can only view/post in a stage discussion if they are an **assignee of that stage** (checked against `PipelineStage.assignees`). Admin and Sales Manager (*) can view/post in any stage discussion.
+> **Note:** A Sales Rep can only view/post in a stage discussion if they are an **assignee of that stage** (checked against `PipelineStage.assignees`) or have been **@mentioned in it** (`StageMessage.mentions`). Admin and Sales Manager (*) can view/post in any stage discussion.
 
 ---
 

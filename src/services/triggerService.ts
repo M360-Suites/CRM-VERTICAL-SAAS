@@ -3,7 +3,7 @@
  *  - queueDealTriggers: called when a deal is created or changes stage; matches the
  *    org's active triggers and queues a TriggerRun (send_at = now + delay).
  *  - processTriggerRun: called by the dispatcher once a run is due; re-checks the
- *    deal still qualifies, renders the template and sends it through SES.
+ *    deal still qualifies, renders the template and sends it through Sender.net.
  */
 import mongoose from 'mongoose';
 import { EmailTrigger, type IEmailTrigger, type TriggerEvent } from '../models/EmailTrigger';
@@ -13,7 +13,7 @@ import { Deal } from '../models/Deal';
 import { PipelineStage } from '../models/Pipeline';
 import { Organization } from '../models/Organization';
 import { logger } from '../config/logger';
-import { sendSesEmail } from '../utils/sesMailer';
+import { SenderRateLimitError, sendEmail } from '../utils/senderMailer';
 import { buildUnsubscribeUrl, renderEmail } from '../utils/emailTemplateRender';
 
 type ObjectIdLike = mongoose.Types.ObjectId | string;
@@ -116,7 +116,8 @@ type PopulatedDeal = {
   owner_id?: { display_name: string; email: string } | null;
 };
 
-type RunOutcome = { status: 'sent' | 'skipped' | 'failed'; error?: string };
+/** `deferred` = rate limited before sending; the run is scheduled again */
+type RunOutcome = { status: 'sent' | 'skipped' | 'failed' | 'deferred'; error?: string };
 
 const finishRun = async (run: Pick<ITriggerRun, '_id'>, outcome: RunOutcome, extra: Record<string, unknown> = {}) => {
   await TriggerRun.updateOne({ _id: run._id }, { $set: { status: outcome.status, error: outcome.error, ...extra } });
@@ -181,21 +182,20 @@ export const processTriggerRun = async (run: ITriggerRun): Promise<RunOutcome> =
       unsubscribe_url: unsubscribeUrl
     });
 
-    const messageId = await sendSesEmail({
+    const messageId = await sendEmail({
       to,
       subject: rendered.subject,
       html: rendered.html,
       fromName: organization?.name,
       replyTo: trigger.recipient === 'contact' ? deal.owner_id?.email : undefined,
-      unsubscribeUrl,
-      tags: { kind: 'trigger', trigger_id: String(trigger._id), run_id: String(run._id) }
+      unsubscribeUrl
     });
 
     const sentAt = new Date();
     await finishRun(run, { status: 'sent' }, {
       to_email: to,
       subject: rendered.subject,
-      ses_message_id: messageId,
+      message_id: messageId,
       sent_at: sentAt,
       error: undefined
     });
@@ -203,6 +203,10 @@ export const processTriggerRun = async (run: ITriggerRun): Promise<RunOutcome> =
 
     return { status: 'sent' };
   } catch (error) {
+    if (error instanceof SenderRateLimitError) {
+      await TriggerRun.updateOne({ _id: run._id }, { $set: { status: 'scheduled' } }).catch(() => undefined);
+      return { status: 'deferred' };
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.error({ err: error, runId: String(run._id) }, 'Email trigger send failed');
     const outcome: RunOutcome = { status: 'failed', error: message };

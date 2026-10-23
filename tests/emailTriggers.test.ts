@@ -8,7 +8,7 @@ const runModel = { create: jest.fn(), updateOne: jest.fn(), findOneAndUpdate: je
 const dealModel = { findOne: jest.fn() };
 const templateModel = { findOne: jest.fn() };
 const organizationModel = { findById: jest.fn() };
-const sendSesEmail = jest.fn();
+const sendEmail = jest.fn();
 
 jest.mock('../src/models/Pipeline', () => ({ PipelineStage: stageModel }));
 jest.mock('../src/models/EmailTrigger', () => ({ EmailTrigger: triggerModel }));
@@ -16,7 +16,10 @@ jest.mock('../src/models/TriggerRun', () => ({ TriggerRun: runModel }));
 jest.mock('../src/models/Deal', () => ({ Deal: dealModel }));
 jest.mock('../src/models/EmailTemplate', () => ({ EmailTemplate: templateModel }));
 jest.mock('../src/models/Organization', () => ({ Organization: organizationModel }));
-jest.mock('../src/utils/sesMailer', () => ({ sendSesEmail: (...args: unknown[]) => sendSesEmail(...args) }));
+jest.mock('../src/utils/senderMailer', () => {
+  class SenderRateLimitError extends Error {}
+  return { SenderRateLimitError, sendEmail: (...args: unknown[]) => sendEmail(...args) };
+});
 jest.mock('../src/config', () => ({ __esModule: true, default: { JWT_SECRET: 'test', BACKEND_URL: 'https://api.test' } }));
 jest.mock('../src/config/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() } }));
 
@@ -115,7 +118,7 @@ describe('processTriggerRun', () => {
       lean: jest.fn().mockResolvedValue({ subject: 'Hi {{contact.first_name}}', html: '<p>{{stage.name}}</p>' })
     });
     organizationModel.findById.mockReturnValue(lean({ name: 'Acme' }));
-    sendSesEmail.mockResolvedValue('ses-123');
+    sendEmail.mockResolvedValue('snd-123');
   });
 
   it('renders and sends to the contact with an unsubscribe link', async () => {
@@ -123,13 +126,13 @@ describe('processTriggerRun', () => {
 
     await expect(processTriggerRun(run)).resolves.toEqual({ status: 'sent' });
 
-    const email = sendSesEmail.mock.calls[0][0];
+    const email = sendEmail.mock.calls[0][0];
     expect(email).toMatchObject({ to: 'ada@example.com', subject: 'Hi Ada', fromName: 'Acme', replyTo: 'grace@co.test' });
     expect(email.html).toContain('<p>Proposal</p>');
     expect(email.unsubscribeUrl).toMatch(/^https:\/\/api\.test\/api\/v1\/public\/email\/unsubscribe/);
     expect(runModel.updateOne).toHaveBeenCalledWith(
       { _id: run._id },
-      { $set: expect.objectContaining({ status: 'sent', ses_message_id: 'ses-123' }) }
+      { $set: expect.objectContaining({ status: 'sent', message_id: 'snd-123' }) }
     );
     expect(triggerModel.updateOne).toHaveBeenCalled();
   });
@@ -138,7 +141,7 @@ describe('processTriggerRun', () => {
     dealModel.findOne.mockReturnValue(populatedDeal({ stage_id: { _id: otherStageId, name: 'Won' } }));
 
     await expect(processTriggerRun(run)).resolves.toMatchObject({ status: 'skipped' });
-    expect(sendSesEmail).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it('skips contacts who unsubscribed', async () => {
@@ -147,13 +150,23 @@ describe('processTriggerRun', () => {
     );
 
     await expect(processTriggerRun(run)).resolves.toMatchObject({ status: 'skipped', error: 'Contact has unsubscribed' });
-    expect(sendSesEmail).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('records SES failures', async () => {
+  it('records send failures', async () => {
     dealModel.findOne.mockReturnValue(populatedDeal());
-    sendSesEmail.mockRejectedValueOnce(new Error('Throttling'));
+    sendEmail.mockRejectedValueOnce(new Error('Throttling'));
 
     await expect(processTriggerRun(run)).resolves.toEqual({ status: 'failed', error: 'Throttling' });
+  });
+
+  it('puts the run back in the queue when Sender.net rate limits', async () => {
+    const { SenderRateLimitError } = jest.requireMock('../src/utils/senderMailer');
+    dealModel.findOne.mockReturnValue(populatedDeal());
+    sendEmail.mockRejectedValueOnce(new SenderRateLimitError());
+    runModel.updateOne.mockResolvedValueOnce({});
+
+    await expect(processTriggerRun(run)).resolves.toEqual({ status: 'deferred' });
+    expect(runModel.updateOne).toHaveBeenCalledWith({ _id: run._id }, { $set: { status: 'scheduled' } });
   });
 });

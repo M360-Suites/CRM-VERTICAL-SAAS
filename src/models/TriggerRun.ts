@@ -20,7 +20,7 @@ export interface ITriggerRun extends Document {
   send_at: Date;
   to_email?: string;
   subject?: string;
-  ses_message_id?: string;
+  message_id?: string;
   error?: string;
   sent_at?: Date;
   created_at: Date;
@@ -39,7 +39,7 @@ const TriggerRunSchema = new Schema<ITriggerRun>(
     send_at: { type: Date, required: true },
     to_email: { type: String },
     subject: { type: String },
-    ses_message_id: { type: String },
+    message_id: { type: String },
     error: { type: String },
     sent_at: { type: Date }
   },
@@ -51,5 +51,6 @@ const TriggerRunSchema = new Schema<ITriggerRun>(
 TriggerRunSchema.index({ dedupe_key: 1 }, { unique: true });
 TriggerRunSchema.index({ status: 1, send_at: 1 });
 TriggerRunSchema.index({ organization_id: 1, trigger_id: 1, created_at: -1 });
+TriggerRunSchema.index({ message_id: 1 }, { sparse: true });
 
 export const TriggerRun = mongoose.model<ITriggerRun>('TriggerRun', TriggerRunSchema);

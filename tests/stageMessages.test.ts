@@ -7,6 +7,7 @@ const messageId = new mongoose.Types.ObjectId().toString();
 const organizationId = new mongoose.Types.ObjectId().toString();
 const userId = new mongoose.Types.ObjectId().toString();
 const otherUserId = new mongoose.Types.ObjectId().toString();
+const thirdUserId = new mongoose.Types.ObjectId().toString();
 
 const lean = <T>(value: T) => ({ lean: jest.fn().mockResolvedValue(value) });
 const populateAndLean = <T>(value: T) => ({
@@ -20,10 +21,13 @@ const stageMessageModel = {
   findById: jest.fn(),
   findOne: jest.fn(),
   findOneAndUpdate: jest.fn(),
-  deleteOne: jest.fn()
+  deleteOne: jest.fn(),
+  exists: jest.fn()
 };
 const pipelineStageModel = { findOne: jest.fn() };
 const notificationModel = { create: jest.fn() };
+const userModel = { find: jest.fn() };
+const selectLean = <T>(value: T) => ({ select: jest.fn().mockReturnValue(lean(value)) });
 
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => {
@@ -45,6 +49,7 @@ jest.mock('../src/middleware/auth', () => ({
 jest.mock('../src/models/StageMessage', () => ({ StageMessage: stageMessageModel }));
 jest.mock('../src/models/Pipeline', () => ({ PipelineStage: pipelineStageModel }));
 jest.mock('../src/models/Notification', () => ({ Notification: notificationModel }));
+jest.mock('../src/models/User', () => ({ User: userModel }));
 jest.mock('../src/services/socketService', () => ({ emitStageMessage: jest.fn() }));
 jest.mock('../src/utils/email', () => ({ sendStageCommentEmail: jest.fn() }));
 
@@ -140,5 +145,97 @@ describe('stage messages API', () => {
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ status: false, message: 'You can only delete your own messages' });
     expect(stageMessageModel.deleteOne).not.toHaveBeenCalled();
+  });
+
+  describe('mentions', () => {
+    const createdMessage = (mentions: string[]) => {
+      const created = { _id: messageId, created_at: new Date('2026-01-01') };
+      stageMessageModel.create.mockResolvedValue(created);
+      stageMessageModel.findById.mockReturnValue(populateAndLean({
+        ...created, stage_id: stageId, sender_id: { _id: userId, email: 'tester@example.com' }, content: 'Hi @Ada', mentions, edited: false
+      }));
+    };
+
+    it('stores mentions and sends mentioned users a mention notification', async () => {
+      createdMessage([otherUserId]);
+      pipelineStageModel.findOne.mockReturnValue(selectLean({ name: 'Qualified', assignees: [otherUserId, thirdUserId] }));
+      userModel.find.mockReturnValue(selectLean([{ _id: new mongoose.Types.ObjectId(otherUserId) }]));
+      notificationModel.create.mockResolvedValue([]);
+
+      const response = await authenticated(request(app).post(`/pipeline/stages/${stageId}/messages`))
+        .send({ content: 'Hi @Ada', mentions: [otherUserId, { id: userId }, 'not-an-id'] });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data.mentions).toEqual([otherUserId]);
+      // The sender and invalid IDs never reach the user lookup
+      expect(userModel.find.mock.calls[0][0]._id.$in.map(String)).toEqual([otherUserId]);
+      expect(stageMessageModel.create.mock.calls[0][0].mentions.map(String)).toEqual([otherUserId]);
+
+      const [assigneeNotifications] = notificationModel.create.mock.calls[0];
+      expect(assigneeNotifications).toHaveLength(1);
+      expect(assigneeNotifications[0]).toMatchObject({ type: 'stage_message' });
+      expect(String(assigneeNotifications[0].userId)).toBe(thirdUserId);
+
+      const [mentionNotifications] = notificationModel.create.mock.calls[1];
+      expect(mentionNotifications).toHaveLength(1);
+      expect(mentionNotifications[0]).toMatchObject({ type: 'mention', title: 'Test User mentioned you in Qualified' });
+      expect(String(mentionNotifications[0].userId)).toBe(otherUserId);
+    });
+
+    it('rejects mentions that are not an array', async () => {
+      const response = await authenticated(request(app).post(`/pipeline/stages/${stageId}/messages`))
+        .send({ content: 'Hi', mentions: otherUserId });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('mentions must be an array of user IDs');
+      expect(stageMessageModel.create).not.toHaveBeenCalled();
+    });
+
+    it('lets a user who was mentioned open the stage discussion without being assigned', async () => {
+      pipelineStageModel.findOne.mockReturnValue(selectLean({ _id: stageId, name: 'Qualified', assignees: [] }));
+      stageMessageModel.exists.mockResolvedValue({ _id: messageId });
+      stageMessageModel.find.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockReturnValue({ skip: jest.fn().mockReturnValue({ limit: jest.fn().mockReturnValue(lean([])) }) })
+        })
+      });
+      stageMessageModel.countDocuments.mockResolvedValue(0);
+
+      const response = await authenticated(request(app).get(`/pipeline/stages/${stageId}/messages`)).set('x-test-role', 'sales_rep');
+
+      expect(response.status).toBe(200);
+      expect(stageMessageModel.exists.mock.calls[0][0]).toMatchObject({ stage_id: stageId });
+    });
+
+    it('blocks an unassigned user who was never mentioned', async () => {
+      pipelineStageModel.findOne.mockReturnValue(selectLean({ _id: stageId, name: 'Qualified', assignees: [] }));
+      stageMessageModel.exists.mockResolvedValue(null);
+
+      const response = await authenticated(request(app).get(`/pipeline/stages/${stageId}/messages`)).set('x-test-role', 'sales_rep');
+
+      expect(response.status).toBe(403);
+    });
+
+    it('notifies only users newly mentioned by an edit', async () => {
+      stageMessageModel.findOne.mockReturnValue(selectLean({ sender_id: userId, mentions: [new mongoose.Types.ObjectId(otherUserId)] }));
+      userModel.find.mockReturnValue(selectLean([
+        { _id: new mongoose.Types.ObjectId(otherUserId) },
+        { _id: new mongoose.Types.ObjectId(thirdUserId) }
+      ]));
+      stageMessageModel.findOneAndUpdate.mockReturnValue(populateAndLean({
+        _id: messageId, stage_id: stageId, sender_id: { _id: userId, email: 'tester@example.com' }, content: 'Hi both', edited: true
+      }));
+      pipelineStageModel.findOne.mockReturnValue(selectLean({ name: 'Qualified' }));
+      notificationModel.create.mockResolvedValue([]);
+
+      const response = await authenticated(request(app).patch(`/pipeline/stages/${stageId}/messages/${messageId}`))
+        .send({ content: 'Hi both', mentions: [otherUserId, thirdUserId] });
+
+      expect(response.status).toBe(200);
+      expect(stageMessageModel.findOneAndUpdate.mock.calls[0][1].$set.mentions.map(String)).toEqual([otherUserId, thirdUserId]);
+      const [notifications] = notificationModel.create.mock.calls[0];
+      expect(notifications).toHaveLength(1);
+      expect(String(notifications[0].userId)).toBe(thirdUserId);
+    });
   });
 });

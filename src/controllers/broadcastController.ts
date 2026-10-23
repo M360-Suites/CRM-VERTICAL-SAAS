@@ -1,5 +1,5 @@
 /**
- * Broadcasts — bulk email to contacts through Amazon SES, with send history
+ * Broadcasts — bulk email to contacts through Sender.net, with send history
  */
 import mongoose from 'mongoose';
 import { Response } from 'express';
@@ -12,8 +12,7 @@ import { Organization } from '../models/Organization';
 import { requireOrganization } from '../utils/tenant';
 import { optionalEnum, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { renderEmail, sampleMergeValues } from '../utils/emailTemplateRender';
-import { sendSesEmail } from '../utils/sesMailer';
-import { isSesConfigured } from '../config/ses';
+import { isSenderConfigured, sendEmail } from '../utils/senderMailer';
 import { buildAudienceFilter, cancelBroadcast, startBroadcast } from '../services/broadcastService';
 import { logger } from '../config/logger';
 
@@ -381,7 +380,7 @@ export const sendBroadcast = async (req: AuthRequest, res: Response): Promise<vo
     const id = parseId(req, res);
     if (!id) return;
 
-    if (!isSesConfigured()) {
+    if (!isSenderConfigured()) {
       res.status(503).json({ status: false, message: 'Email sending is not configured' });
       return;
     }
@@ -471,7 +470,7 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
     const id = parseId(req, res);
     if (!id) return;
 
-    if (!isSesConfigured()) {
+    if (!isSenderConfigured()) {
       res.status(503).json({ status: false, message: 'Email sending is not configured' });
       return;
     }
@@ -486,12 +485,11 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
     }
 
     const rendered = renderEmail(broadcast, { organization }, sampleMergeValues());
-    await sendSesEmail({
+    await sendEmail({
       to: req.user.email,
       subject: `[Test] ${rendered.subject}`,
       html: rendered.html,
-      fromName: organization?.name,
-      tags: { kind: 'broadcast_test' }
+      fromName: organization?.name
     });
 
     res.json({ status: true, message: `Test email sent to ${req.user.email}` });

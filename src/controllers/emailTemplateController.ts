@@ -9,11 +9,10 @@ import { EmailTrigger } from '../models/EmailTrigger';
 import { requireOrganization } from '../utils/tenant';
 import { optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { MERGE_VARIABLES, renderEmail, renderMergeTags, sampleMergeValues } from '../utils/emailTemplateRender';
-import { sendSesEmail } from '../utils/sesMailer';
-import { isSesConfigured } from '../config/ses';
+import { isSenderConfigured, sendEmail } from '../utils/senderMailer';
 import { logger } from '../config/logger';
 
-/** Generous cap — inline-styled canvas output gets large, but SES rejects > 10MB */
+/** Generous cap — inline-styled canvas output gets large, but mail providers reject very large messages */
 const MAX_HTML_LENGTH = 500_000;
 
 const handleError = (res: Response, error: unknown, message: string): void => {
@@ -308,7 +307,7 @@ export const sendTestTemplate = async (req: AuthRequest, res: Response): Promise
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    if (!isSesConfigured()) {
+    if (!isSenderConfigured()) {
       res.status(503).json({ status: false, message: 'Email sending is not configured' });
       return;
     }
@@ -326,11 +325,10 @@ export const sendTestTemplate = async (req: AuthRequest, res: Response): Promise
     }
 
     const rendered = renderEmail(template, {}, sampleMergeValues());
-    await sendSesEmail({
+    await sendEmail({
       to: req.user.email,
       subject: `[Test] ${rendered.subject}`,
-      html: rendered.html,
-      tags: { kind: 'template_test' }
+      html: rendered.html
     });
 
     res.json({ status: true, message: `Test email sent to ${req.user.email}` });

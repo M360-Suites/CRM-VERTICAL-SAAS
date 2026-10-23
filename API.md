@@ -1086,7 +1086,7 @@ User-configured automations: when something happens to a deal, send a template.
 
 ### Broadcasts
 
-Bulk email to contacts through Amazon SES, with per-contact history.
+Bulk email to contacts through Sender.net's transactional API, with per-contact history.
 
 **Access:** read = all roles · manage = admin only
 
@@ -1111,7 +1111,7 @@ Bulk email to contacts through Amazon SES, with per-contact history.
 |--------|----------|-------------|
 | GET | /public/email/unsubscribe?token= | Confirmation page linked from every email |
 | POST | /public/email/unsubscribe?token= | Opts the contact out (also RFC 8058 one-click from Gmail/Yahoo) |
-| POST | /api/webhooks/ses | SNS endpoint for SES events: hard bounces opt the address out in every org; complaints opt it out in the sending org |
+| POST | /api/webhooks/sender?secret= | Sender.net `bounces/new` webhook: hard bounces opt the address out in every org and mark the broadcast recipient `bounced` |
 
 Contacts carry `email_opt_out`, `email_opt_out_reason` (`unsubscribed` / `bounced` / `complained`) and `email_opt_out_at`.
 
@@ -1119,17 +1119,15 @@ Contacts carry `email_opt_out`, `email_opt_out_reason` (`unsubscribed` / `bounce
 
 | Env var | Required | Description |
 |---------|----------|-------------|
-| `AWS_REGION` | yes | SES region, e.g. `us-east-1` |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | yes (or an IAM role) | Needs `ses:SendEmail` |
-| `SES_FROM_EMAIL` | yes | Address on a verified SES domain, e.g. `hello@mail.yourapp.com` |
-| `SES_FROM_NAME` | no | Fallback sender name (the organization's name is used when known) |
-| `SES_CONFIGURATION_SET` | no | Configuration set whose event destination publishes Bounce + Complaint to SNS |
-| `SES_SNS_TOPIC_ARN` | no | When set, the webhook only accepts this topic |
-| `SES_MAX_SEND_RATE` | no | Emails/second (default 10; match your SES quota) |
+| `SENDER_API_TOKEN` | yes | Sender.net → Settings → API access tokens |
+| `SENDER_FROM_EMAIL` | yes | Address on a domain verified in Sender.net, e.g. `hello@mail.yourapp.com` |
+| `SENDER_FROM_NAME` | no | Fallback sender name (the organization's name is used when known) |
+| `SENDER_WEBHOOK_SECRET` | yes, for bounces | Random string; the bounce webhook URL must carry it as `?secret=` |
+| `EMAIL_MAX_SEND_RATE` | no | Emails/second (default 5). A `429` from Sender.net pauses sending and re-queues the email |
 | `EMAIL_DISPATCH_INTERVAL_SECONDS` | no | Queue poll interval (default 30) |
 | `BACKEND_URL` | yes | Public API URL, used to build unsubscribe links |
 
-Without `AWS_REGION` and `SES_FROM_EMAIL` the server still starts: triggers keep queueing runs, and send endpoints return `503`. Point an SNS HTTPS subscription at `{BACKEND_URL}/api/webhooks/ses`; it confirms itself.
+Without `SENDER_API_TOKEN` and `SENDER_FROM_EMAIL` the server still starts: triggers keep queueing runs, and send endpoints return `503`. In Sender.net → Settings → Webhooks, add a `bounces/new` webhook pointing at `{BACKEND_URL}/api/webhooks/sender?secret={SENDER_WEBHOOK_SECRET}`.
 
 ---
 

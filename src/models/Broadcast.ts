@@ -1,6 +1,6 @@
 /**
  * Broadcast model
- * A bulk email sent through Amazon SES to an audience of contacts.
+ * A bulk email sent through Sender.net to an audience of contacts.
  * Recipients are snapshotted into BroadcastRecipient when the send starts,
  * so the history reflects exactly who it went to.
  */

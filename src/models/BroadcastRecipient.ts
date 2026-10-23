@@ -13,7 +13,7 @@ export interface IBroadcastRecipient extends Document {
   email: string;
   name?: string;
   status: BroadcastRecipientStatus;
-  ses_message_id?: string;
+  message_id?: string;
   error?: string;
   sent_at?: Date;
   created_at: Date;
@@ -32,7 +32,7 @@ const BroadcastRecipientSchema = new Schema<IBroadcastRecipient>(
       enum: ['queued', 'sending', 'sent', 'failed', 'bounced', 'complained', 'skipped'],
       default: 'queued'
     },
-    ses_message_id: { type: String },
+    message_id: { type: String },
     error: { type: String },
     sent_at: { type: Date }
   },
@@ -43,6 +43,6 @@ const BroadcastRecipientSchema = new Schema<IBroadcastRecipient>(
 
 BroadcastRecipientSchema.index({ broadcast_id: 1, email: 1 }, { unique: true });
 BroadcastRecipientSchema.index({ broadcast_id: 1, status: 1 });
-BroadcastRecipientSchema.index({ ses_message_id: 1 }, { sparse: true });
+BroadcastRecipientSchema.index({ message_id: 1 }, { sparse: true });
 
 export const BroadcastRecipient = mongoose.model<IBroadcastRecipient>('BroadcastRecipient', BroadcastRecipientSchema);

@@ -1,5 +1,5 @@
 /**
- * Broadcasts — bulk email to contacts through Amazon SES.
+ * Broadcasts — bulk email to contacts through Sender.net.
  *  - buildAudienceFilter: turns a broadcast audience into a Contact query
  *  - startBroadcast: snapshots the audience into BroadcastRecipient rows
  *  - sendNextBroadcastRecipient: called by the dispatcher, one email at a time
@@ -11,7 +11,7 @@ import { Contact } from '../models/Contact';
 import { Organization } from '../models/Organization';
 import { User } from '../models/User';
 import { logger } from '../config/logger';
-import { sendSesEmail } from '../utils/sesMailer';
+import { SenderRateLimitError, sendEmail } from '../utils/senderMailer';
 import { buildUnsubscribeUrl, renderEmail } from '../utils/emailTemplateRender';
 
 const INSERT_CHUNK = 500;
@@ -223,18 +223,23 @@ export const sendNextBroadcastRecipient = async (): Promise<boolean> => {
       unsubscribe_url: unsubscribeUrl
     });
 
-    const messageId = await sendSesEmail({
+    const messageId = await sendEmail({
       to: recipient.email,
+      toName: recipient.name,
       subject: rendered.subject,
       html: rendered.html,
       fromName: context.organizationName,
       replyTo: context.replyTo,
-      unsubscribeUrl,
-      tags: { kind: 'broadcast', broadcast_id: String(recipient.broadcast_id) }
+      unsubscribeUrl
     });
 
-    await settle('sent', { ses_message_id: messageId, sent_at: new Date() });
+    await settle('sent', { message_id: messageId, sent_at: new Date() });
   } catch (error) {
+    if (error instanceof SenderRateLimitError) {
+      // Nothing went out — put it back so it's sent once the limit lifts
+      await BroadcastRecipient.updateOne({ _id: recipient._id }, { $set: { status: 'queued' } }).catch(() => undefined);
+      return true;
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.warn({ err: error, recipientId: String(recipient._id) }, 'Broadcast email failed');
     await settle('failed', { error: message }).catch(() => undefined);

@@ -71,7 +71,7 @@ router.use(authenticate);
  *                     total_pages:
  *                       type: integer
  *       403:
- *         description: Not a stage assignee
+ *         description: Not a stage assignee and never mentioned in this discussion
  *   post:
  *     summary: Post a message in a stage discussion
  *     tags: [Stage Messages]
@@ -95,6 +95,12 @@ router.use(authenticate);
  *               content:
  *                 type: string
  *                 maxLength: 5000
+ *               mentions:
+ *                 type: array
+ *                 maxItems: 50
+ *                 description: IDs of @mentioned users. They get a `mention` notification and can open the discussion. On edit, only newly added users are notified; omit to keep the existing mentions.
+ *                 items:
+ *                   type: string
  *     responses:
  *       201:
  *         description: Message posted successfully
@@ -144,6 +150,12 @@ router.post('/:stageId/messages', createStageMessage);
  *               content:
  *                 type: string
  *                 maxLength: 5000
+ *               mentions:
+ *                 type: array
+ *                 maxItems: 50
+ *                 description: IDs of @mentioned users. They get a `mention` notification and can open the discussion. On edit, only newly added users are notified; omit to keep the existing mentions.
+ *                 items:
+ *                   type: string
  *     responses:
  *       200:
  *         description: Message updated successfully

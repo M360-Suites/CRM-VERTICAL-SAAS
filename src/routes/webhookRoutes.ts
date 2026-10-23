@@ -1,6 +1,6 @@
 import { Router, type Router as RouterType } from 'express';
 import { handleUnipileWebhook } from '../controllers/unipileWebhookController';
-import { handleSesWebhook } from '../controllers/emailEventsController';
+import { handleSenderWebhook } from '../controllers/emailEventsController';
 
 const router: RouterType = Router();
 
@@ -47,12 +47,14 @@ router.post('/unipile', handleUnipileWebhook);
 
 /**
  * @swagger
- * /api/webhooks/ses:
+ * /api/webhooks/sender:
  *   post:
  *     tags: [Broadcasts]
- *     summary: Amazon SNS endpoint for SES bounce and complaint events
- *     description: Signature-verified. Hard bounces and complaints opt the contact out of further email.
+ *     summary: Sender.net bounces/new webhook
+ *     description: Requires ?secret= matching SENDER_WEBHOOK_SECRET. Hard bounces opt the address out of further email.
+ *     parameters:
+ *       - { in: query, name: secret, required: true, schema: { type: string } }
  */
-router.post('/ses', handleSesWebhook);
+router.post('/sender', handleSenderWebhook);
 
 export default router;

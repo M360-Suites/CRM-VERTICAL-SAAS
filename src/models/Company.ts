@@ -19,6 +19,8 @@ export interface ICompany extends Document {
   email?: string;
   phone?: string;
   address?: string;
+  /** Extra columns captured from CSV imports */
+  custom_fields?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -38,7 +40,8 @@ const CompanySchema = new Schema<ICompany>(
     contact_person: { type: String },
     email: { type: String },
     phone: { type: String },
-    address: { type: String }
+    address: { type: String },
+    custom_fields: { type: Schema.Types.Mixed, default: {} }
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

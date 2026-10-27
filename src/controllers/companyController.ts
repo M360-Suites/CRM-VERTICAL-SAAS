@@ -5,6 +5,7 @@ import { Contact } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, parseImportCsv } from '../utils/csvImport';
 
 interface CompanyQuery {
   page?: number;
@@ -196,60 +197,22 @@ interface CreateCompanyBody {
   address?: string;
 }
 
-type CsvCompanyRow = Partial<Record<keyof CreateCompanyBody, string>>;
-
-const parseCsv = (csv: string): CsvCompanyRow[] => {
-  const rows: string[][] = [];
-  let current = '';
-  let row: string[] = [];
-  let inQuotes = false;
-
-  for (let i = 0; i < csv.length; i++) {
-    const char = csv[i];
-    const next = csv[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      row.push(current);
-      current = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && next === '\n') i++;
-      row.push(current);
-      if (row.some((value) => value.trim() !== '')) rows.push(row);
-      row = [];
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  row.push(current);
-  if (row.some((value) => value.trim() !== '')) rows.push(row);
-
-  if (rows.length < 2) return [];
-
-  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, '').trim().toLowerCase());
-  return rows.slice(1).map((values) =>
-    headers.reduce<CsvCompanyRow>((company, header, index) => {
-      if (header) {
-        company[header as keyof CreateCompanyBody] = values[index]?.trim() || '';
-      }
-      return company;
-    }, {})
-  );
+/** CSV header (normalized) -> company field. Unlisted columns become custom fields. */
+const COMPANY_CSV_FIELDS: Record<string, string> = {
+  name: 'name',
+  company: 'name',
+  company_name: 'name',
+  industry: 'industry',
+  website: 'website',
+  url: 'website',
+  notes: 'notes',
+  contact_person: 'contact_person',
+  contact_name: 'contact_person',
+  email: 'email',
+  email_address: 'email',
+  phone: 'phone',
+  phone_number: 'phone',
+  address: 'address'
 };
 
 export const createCompany = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -290,6 +253,12 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+/**
+ * Bulk import companies from CSV
+ * `name`, `email` and `phone` are required. Recognised optional columns:
+ * industry, website, notes, contact_person, address. Every other column is
+ * stored in the company's custom_fields.
+ */
 export const bulkImportCompanies = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const organizationId = requireOrganization(req, res);
@@ -303,9 +272,9 @@ export const bulkImportCompanies = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    const companies = parseCsv(req.file.buffer.toString('utf8'));
+    const { rows, custom_columns } = parseImportCsv(req.file.buffer.toString('utf8'), COMPANY_CSV_FIELDS);
 
-    if (companies.length === 0) {
+    if (rows.length === 0) {
       res.status(400).json({
         status: false,
         message: 'CSV file must include a header row and at least one company row'
@@ -313,29 +282,50 @@ export const bulkImportCompanies = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
+    if (rows.length > MAX_IMPORT_ROWS) {
+      res.status(400).json({
+        status: false,
+        message: `CSV file can contain at most ${MAX_IMPORT_ROWS} company rows`
+      });
+      return;
+    }
+
     const errors: string[] = [];
     const validCompanies: Record<string, unknown>[] = [];
 
-    for (let i = 0; i < companies.length; i++) {
-      const company = companies[i];
-      if (!company.name) {
-        errors.push(`Row ${i + 1}: name is required`);
-        continue;
+    rows.forEach(({ fields, custom_fields }, i) => {
+      const row = `Row ${i + 1}`;
+      const missing = [!fields.name && 'name', !fields.email && 'email', !fields.phone && 'phone'].filter(Boolean);
+
+      if (missing.length > 0) {
+        errors.push(`${row}: ${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`);
+        return;
+      }
+
+      if (!isValidEmail(fields.email)) {
+        errors.push(`${row}: email is invalid`);
+        return;
+      }
+
+      if (!isValidPhone(fields.phone)) {
+        errors.push(`${row}: phone is invalid`);
+        return;
       }
 
       validCompanies.push({
-        name: company.name,
-        industry: company.industry,
-        website: company.website,
-        notes: company.notes,
-        contact_person: company.contact_person,
-        email: company.email,
-        phone: company.phone,
-        address: company.address,
+        name: fields.name,
+        industry: fields.industry || undefined,
+        website: fields.website || undefined,
+        notes: fields.notes || undefined,
+        contact_person: fields.contact_person || undefined,
+        email: fields.email.toLowerCase(),
+        phone: fields.phone,
+        address: fields.address || undefined,
+        custom_fields,
         owner_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
         organization_id: organizationId
       });
-    }
+    });
 
     let imported = 0;
     if (validCompanies.length > 0) {
@@ -346,7 +336,12 @@ export const bulkImportCompanies = async (req: AuthRequest, res: Response): Prom
     res.json({
       status: true,
       message: 'Companies imported successfully',
-      data: { imported, errors: errors.length > 0 ? errors : undefined }
+      data: {
+        imported,
+        failed: errors.length,
+        custom_columns,
+        errors: errors.length > 0 ? errors : undefined
+      }
     });
   } catch (error) {
     res.status(500).json({

@@ -65,7 +65,8 @@ export interface IContact extends Document {
 const ContactSchema = new Schema<IContact>(
   {
     first_name: { type: String, required: true },
-    last_name: { type: String, required: true },
+    /** Optional so single-word names from CSV imports are accepted */
+    last_name: { type: String, default: '' },
     email: { type: String },
     phone: { type: String },
     role_title: { type: String },

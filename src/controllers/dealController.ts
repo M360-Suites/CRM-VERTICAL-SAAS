@@ -4,9 +4,11 @@ import { Deal, IDeal, DealStatus } from '../models/Deal';
 import { Company } from '../models/Company';
 import { Contact } from '../models/Contact';
 import { Activity } from '../models/Activity';
-import { PipelineStage } from '../models/Pipeline';
+import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { MAX_IMPORT_ROWS, nameKey, parseImportCsv } from '../utils/csvImport';
+import { parseLeadValue } from '../utils/leadValue';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
 import { assignDealOwner } from '../services/dealAssignmentService';
@@ -881,5 +883,292 @@ export const assignDeal = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error) {
     res.status(500).json({ status: false, message: 'Failed to assign deal' });
+  }
+};
+
+/** CSV header (normalized) -> deal field. Unlisted columns become custom fields. */
+const DEAL_CSV_FIELDS: Record<string, string> = {
+  title: 'title',
+  deal_title: 'title',
+  deal_name: 'title',
+  name: 'title',
+  value: 'value',
+  deal_value: 'value',
+  amount: 'value',
+  estimated_value: 'value',
+  budget: 'value',
+  currency: 'currency',
+  status: 'status',
+  stage: 'stage',
+  stage_name: 'stage',
+  stage_id: 'stage_id',
+  pipeline: 'pipeline',
+  pipeline_name: 'pipeline',
+  pipeline_id: 'pipeline_id',
+  expected_close_date: 'expected_close_date',
+  close_date: 'expected_close_date',
+  summary: 'summary',
+  description: 'description',
+  source: 'source',
+  lead_source: 'source',
+  industry: 'industry',
+  company: 'company',
+  company_name: 'company',
+  company_id: 'company_id',
+  contact_email: 'contact_email',
+  email: 'contact_email',
+  contact_id: 'contact_id'
+};
+
+const DEAL_STATUSES: DealStatus[] = ['open', 'won', 'lost'];
+
+type ImportStage = {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  pipeline_id: mongoose.Types.ObjectId;
+  order: number;
+  is_won: boolean;
+  is_lost: boolean;
+};
+
+type ImportContact = { _id: mongoose.Types.ObjectId; email?: string; company_id?: mongoose.Types.ObjectId };
+
+/**
+ * Bulk import deals (pipeline leads) from CSV
+ * `title` is required; `value` accepts formats like "5000", "$5,000" or "5k" and defaults to 0.
+ * Stage is matched by `stage_id` or `stage` name (within `pipeline` / `pipeline_id`,
+ * default pipeline otherwise) and falls back to that pipeline's first open stage.
+ * Company and contact link by id, company name or contact email when they exist.
+ * Every other column is stored in the deal's custom_fields.
+ */
+export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const organizationId = requireOrganization(req, res);
+    if (!organizationId) return;
+
+    if (!req.file) {
+      res.status(400).json({
+        status: false,
+        message: 'CSV file is required'
+      });
+      return;
+    }
+
+    const { rows, custom_columns } = parseImportCsv(req.file.buffer.toString('utf8'), DEAL_CSV_FIELDS);
+
+    if (rows.length === 0) {
+      res.status(400).json({
+        status: false,
+        message: 'CSV file must include a header row and at least one deal row'
+      });
+      return;
+    }
+
+    if (rows.length > MAX_IMPORT_ROWS) {
+      res.status(400).json({
+        status: false,
+        message: `CSV file can contain at most ${MAX_IMPORT_ROWS} deal rows`
+      });
+      return;
+    }
+
+    const distinct = (key: string) => [...new Set(rows.map(({ fields }) => fields[key]).filter(Boolean))];
+    const validIds = (key: string) => distinct(key).filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const caseInsensitive = { locale: 'en', strength: 2 };
+
+    const companyIds = validIds('company_id');
+    const companyNames = distinct('company');
+    const contactIds = validIds('contact_id');
+    const contactEmails = distinct('contact_email');
+
+    // Resolve every reference up front instead of querying per row
+    const [pipelines, stages, companiesById, companiesByName, contactsById, contactsByEmail] = await Promise.all([
+      Pipeline.find({ organization_id: organizationId }).select('_id name is_default').sort({ created_at: 1 }).lean(),
+      PipelineStage.find({ organization_id: organizationId })
+        .select('_id name pipeline_id order is_won is_lost')
+        .sort({ order: 1 })
+        .lean<ImportStage[]>(),
+      companyIds.length
+        ? Company.find({ _id: { $in: companyIds }, organization_id: organizationId }).select('_id').lean()
+        : Promise.resolve([]),
+      companyNames.length
+        ? Company.find({ name: { $in: companyNames }, organization_id: organizationId })
+            .collation(caseInsensitive)
+            .select('_id name')
+            .lean()
+        : Promise.resolve([]),
+      contactIds.length
+        ? Contact.find({ _id: { $in: contactIds }, organization_id: organizationId }).select('_id company_id').lean<ImportContact[]>()
+        : Promise.resolve([] as ImportContact[]),
+      contactEmails.length
+        ? Contact.find({ email: { $in: contactEmails }, organization_id: organizationId })
+            .collation(caseInsensitive)
+            .select('_id email company_id')
+            .lean<ImportContact[]>()
+        : Promise.resolve([] as ImportContact[])
+    ]);
+
+    const defaultPipeline = pipelines.find((pipeline) => pipeline.is_default) ?? pipelines[0];
+    const pipelineById = new Map(pipelines.map((pipeline) => [pipeline._id.toString(), pipeline]));
+    const pipelineByName = new Map(pipelines.map((pipeline) => [nameKey(pipeline.name), pipeline]));
+    const stageById = new Map(stages.map((stage) => [stage._id.toString(), stage]));
+    const stagesForPipeline = (pipelineId: mongoose.Types.ObjectId) =>
+      stages.filter((stage) => stage.pipeline_id.toString() === pipelineId.toString());
+
+    const knownCompanyIds = new Set(companiesById.map((company) => company._id.toString()));
+    const companyIdByName = new Map(companiesByName.map((company) => [nameKey(company.name), company._id]));
+    const contactById = new Map(contactsById.map((contact) => [contact._id.toString(), contact]));
+    const contactByEmail = new Map(contactsByEmail.map((contact) => [nameKey(contact.email ?? ''), contact]));
+
+    const ownerId = req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined;
+    const now = new Date();
+    const errors: string[] = [];
+    const validDeals: Record<string, unknown>[] = [];
+
+    rows.forEach(({ fields, custom_fields }, i) => {
+      const row = `Row ${i + 1}`;
+      const extra: Record<string, unknown> = { ...custom_fields };
+
+      if (!fields.title) {
+        errors.push(`${row}: title is required`);
+        return;
+      }
+
+      let value = 0;
+      if (fields.value) {
+        const parsed = parseLeadValue(fields.value);
+        const isZero = /^[^\d]*0+(\.0+)?[^\d]*$/.test(fields.value);
+        if (parsed === undefined && !isZero) {
+          errors.push(`${row}: value is invalid`);
+          return;
+        }
+        value = parsed ?? 0;
+      }
+
+      let expectedCloseDate: Date | undefined;
+      if (fields.expected_close_date) {
+        expectedCloseDate = new Date(fields.expected_close_date);
+        if (Number.isNaN(expectedCloseDate.getTime())) {
+          errors.push(`${row}: expected_close_date is invalid`);
+          return;
+        }
+      }
+
+      const status = fields.status ? (fields.status.toLowerCase() as DealStatus) : undefined;
+      if (status && !DEAL_STATUSES.includes(status)) {
+        errors.push(`${row}: status must be one of ${DEAL_STATUSES.join(', ')}`);
+        return;
+      }
+
+      // Stage: explicit id > name within the chosen pipeline > first open stage of that pipeline
+      let stage: ImportStage | undefined;
+      if (fields.stage_id) {
+        stage = stageById.get(fields.stage_id);
+        if (!stage) {
+          errors.push(`${row}: stage_id is invalid`);
+          return;
+        }
+      } else {
+        const pipelineRef = fields.pipeline_id || fields.pipeline;
+        const pipeline = fields.pipeline_id
+          ? pipelineById.get(fields.pipeline_id)
+          : fields.pipeline
+            ? pipelineByName.get(nameKey(fields.pipeline))
+            : defaultPipeline;
+        if (!pipeline && pipelineRef) {
+          errors.push(`${row}: pipeline "${pipelineRef}" not found`);
+          return;
+        }
+        const candidates = pipeline ? stagesForPipeline(pipeline._id) : [];
+        if (fields.stage) {
+          stage = candidates.find((candidate) => nameKey(candidate.name) === nameKey(fields.stage));
+          if (!stage) {
+            errors.push(`${row}: stage "${fields.stage}" not found${pipeline ? ` in pipeline "${pipeline.name}"` : ''}`);
+            return;
+          }
+        } else {
+          stage = candidates.find((candidate) => !candidate.is_won && !candidate.is_lost) ?? candidates[0];
+        }
+      }
+
+      let companyId: mongoose.Types.ObjectId | undefined;
+      if (fields.company_id) {
+        if (!knownCompanyIds.has(fields.company_id)) {
+          errors.push(`${row}: company_id is invalid`);
+          return;
+        }
+        companyId = new mongoose.Types.ObjectId(fields.company_id);
+      } else if (fields.company) {
+        companyId = companyIdByName.get(nameKey(fields.company));
+        // An unmatched company name is kept rather than dropped
+        if (!companyId) extra.company = fields.company;
+      }
+
+      let contact: ImportContact | undefined;
+      if (fields.contact_id) {
+        contact = contactById.get(fields.contact_id);
+        if (!contact) {
+          errors.push(`${row}: contact_id is invalid`);
+          return;
+        }
+      } else if (fields.contact_email) {
+        contact = contactByEmail.get(nameKey(fields.contact_email));
+        if (!contact) extra.contact_email = fields.contact_email;
+      }
+
+      validDeals.push({
+        title: fields.title,
+        value,
+        currency: fields.currency ? fields.currency.toUpperCase() : undefined,
+        // A won/lost stage decides the status; otherwise use the column, default open
+        status: stage?.is_won ? 'won' : stage?.is_lost ? 'lost' : status ?? 'open',
+        expected_close_date: expectedCloseDate,
+        stage_id: stage?._id,
+        stage_changed_at: stage ? now : undefined,
+        summary: fields.summary || undefined,
+        description: fields.description || undefined,
+        source: fields.source || 'csv_import',
+        industry: fields.industry || undefined,
+        company_id: companyId ?? contact?.company_id,
+        contact_id: contact?._id,
+        owner_id: ownerId,
+        organization_id: organizationId,
+        custom_fields: extra
+      });
+    });
+
+    let imported = 0;
+    if (validDeals.length > 0) {
+      const created = await Deal.insertMany(validDeals);
+      imported = created.length;
+
+      if (ownerId) {
+        await Activity.insertMany(
+          created.map((deal) => ({
+            type: 'deal_created',
+            content: `Deal "${deal.title}" imported from CSV`,
+            deal_id: deal._id,
+            user_id: ownerId,
+            organization_id: organizationId
+          }))
+        );
+      }
+    }
+
+    res.json({
+      status: true,
+      message: 'Deals imported successfully',
+      data: {
+        imported,
+        failed: errors.length,
+        custom_columns,
+        errors: errors.length > 0 ? errors : undefined
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: 'Failed to import deals'
+    });
   }
 };

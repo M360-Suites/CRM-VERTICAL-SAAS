@@ -1,0 +1,15 @@
+REMINDERS
+=========
+
+- Single-word contact names: last_name is now optional on the Contact model
+  so a CSV name like "Cher" imports. The normal create-contact endpoint
+  still requires both names.
+
+- Companies: the Company model now has a custom_fields field.
+
+- Deal owner and automations: imported deals are owned by the person
+  importing and logged as created. Deal automations (triggers) don't run
+  on import, so a bulk import won't send automated emails.
+
+- Shared code: the CSV reading and upload handling now live in one place,
+  src/utils/csvImport.ts, used by all three imports.

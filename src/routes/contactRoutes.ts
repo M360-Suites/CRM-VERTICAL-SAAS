@@ -3,8 +3,6 @@
  * Handles CRUD operations for contacts and related data
  */
 import { Router, type Router as RouterType } from 'express';
-import type { Request } from 'express';
-import multer from 'multer';
 import {
   listContacts,
   getAllContacts,
@@ -19,26 +17,8 @@ import {
   exportContacts
 } from '../controllers/contactController';
 import { authenticate, authorize } from '../middleware/auth';
+import { uploadCsv } from '../utils/csvImport';
 
-type MulterOptions = NonNullable<Parameters<typeof multer>[0]>;
-type FileFilterCallback = {
-  (error: Error): void;
-  (error: null, acceptFile: boolean): void;
-};
-
-const csvUploadOptions: MulterOptions = {
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    const isCsv =
-      file.originalname.toLowerCase().endsWith('.csv') ||
-      ['text/csv', 'application/csv', 'application/vnd.ms-excel'].includes(file.mimetype);
-
-    cb(null, isCsv);
-  }
-};
-
-const uploadCsv = multer(csvUploadOptions);
 const router: RouterType = Router();
 
 router.use(authenticate);
@@ -366,10 +346,10 @@ router.get('/:id/tasks', getContactTasks);
  *               file:
  *                 type: string
  *                 format: binary
- *                 description: CSV with first_name and last_name columns. Optional columns include email, phone, role_title, company_id, temperature, and tags.
+ *                 description: CSV with required name (or first_name + last_name), email and phone columns. Recognised optional columns are role_title, company_id or company (matched by name), temperature and tags. Any other column is stored in custom_fields.
  *     responses:
  *       200:
- *         description: Contacts imported successfully
+ *         description: Contacts imported. Returns imported count, failed count, custom_columns and per-row errors.
  */
 router.post('/bulk-import', authorize('admin', 'sales_manager', 'sales_rep'), uploadCsv.single('file'), bulkImportContacts);
 

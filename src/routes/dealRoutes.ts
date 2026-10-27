@@ -11,9 +11,11 @@ import {
   getDealStats,
   updateDealStage,
   bulkUpdateStage,
-  assignDeal
+  assignDeal,
+  bulkImportDeals
 } from '../controllers/dealController';
 import { authenticate, authorize } from '../middleware/auth';
+import { uploadCsv } from '../utils/csvImport';
 
 const router: RouterType = Router();
 
@@ -140,6 +142,41 @@ router.get('/all', getAllDeals);
  *         description: Deal created successfully
  */
 router.post('/', authorize('admin', 'sales_manager', 'sales_rep'), createDeal);
+
+/**
+ * @swagger
+ * /deals/bulk-import:
+ *   post:
+ *     summary: Bulk import deals (pipeline leads) from CSV
+ *     description: |
+ *       Required column: title (aliases deal_title, deal_name, name).
+ *       Recognised optional columns: value (aliases amount, deal_value, budget; accepts "5000", "$5,000", "5k"; defaults to 0),
+ *       currency, status (open/won/lost), stage or stage_id, pipeline or pipeline_id, expected_close_date (alias close_date),
+ *       summary, description, source, industry, company or company_id, contact_email (alias email) or contact_id.
+ *       Without a stage the deal lands in the first open stage of the default pipeline. Company and contact are linked
+ *       when they already exist; unmatched names/emails are kept in custom_fields. Any other column is stored in custom_fields.
+ *     tags: [Deals]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Deals imported. Returns imported count, failed count, custom_columns and per-row errors.
+ *       400:
+ *         description: Missing or empty CSV file
+ */
+router.post('/bulk-import', authorize('admin', 'sales_manager', 'sales_rep'), uploadCsv.single('file'), bulkImportDeals);
 
 /**
  * @swagger

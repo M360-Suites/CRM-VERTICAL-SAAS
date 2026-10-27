@@ -6,10 +6,12 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import { Contact, IContact, Temperature } from '../models/Contact';
 import { Activity } from '../models/Activity';
+import { Company } from '../models/Company';
 import { Deal } from '../models/Deal';
 import { Task } from '../models/Task';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, nameKey, parseImportCsv } from '../utils/csvImport';
 
 /** Query parameters for listing contacts */
 interface ContactQuery {
@@ -538,65 +540,29 @@ export const exportContacts = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-type CsvContactRow = Partial<Record<keyof CreateContactBody, string>>;
-
-const CONTACT_CSV_HEADER_ALIASES: Record<string, keyof CreateContactBody> = {
-  role: 'role_title'
-};
-
-const parseCsv = (csv: string): CsvContactRow[] => {
-  const rows: string[][] = [];
-  let current = '';
-  let row: string[] = [];
-  let inQuotes = false;
-
-  for (let i = 0; i < csv.length; i++) {
-    const char = csv[i];
-    const next = csv[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      row.push(current);
-      current = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && next === '\n') i++;
-      row.push(current);
-      if (row.some((value) => value.trim() !== '')) rows.push(row);
-      row = [];
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  row.push(current);
-  if (row.some((value) => value.trim() !== '')) rows.push(row);
-
-  if (rows.length < 2) return [];
-
-  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, '').trim().toLowerCase());
-  return rows.slice(1).map((values) =>
-    headers.reduce<CsvContactRow>((contact, header, index) => {
-      if (header) {
-        const field = CONTACT_CSV_HEADER_ALIASES[header] || (header as keyof CreateContactBody);
-        contact[field] = values[index]?.trim() || '';
-      }
-      return contact;
-    }, {})
-  );
+/** CSV header (normalized) -> contact field. Unlisted columns become custom fields. */
+const CONTACT_CSV_FIELDS: Record<string, string> = {
+  name: 'name',
+  full_name: 'name',
+  contact_name: 'name',
+  first_name: 'first_name',
+  firstname: 'first_name',
+  last_name: 'last_name',
+  lastname: 'last_name',
+  surname: 'last_name',
+  email: 'email',
+  email_address: 'email',
+  phone: 'phone',
+  phone_number: 'phone',
+  mobile: 'phone',
+  role_title: 'role_title',
+  role: 'role_title',
+  job_title: 'role_title',
+  company_id: 'company_id',
+  company: 'company',
+  company_name: 'company',
+  temperature: 'temperature',
+  tags: 'tags'
 };
 
 const parseTags = (tags?: string): string[] => {
@@ -608,12 +574,22 @@ const parseTags = (tags?: string): string[] => {
 };
 
 const parseTemperature = (temperature?: string): Temperature => {
-  return temperature === 'hot' || temperature === 'cold' || temperature === 'warm' ? temperature : 'warm';
+  const value = temperature?.toLowerCase();
+  return value === 'hot' || value === 'cold' || value === 'warm' ? value : 'warm';
+};
+
+/** A single "name" column is split on the first space: "Ada King Lovelace" -> Ada / King Lovelace */
+const splitName = (fields: Record<string, string>): { first_name: string; last_name: string } => {
+  if (fields.first_name) return { first_name: fields.first_name, last_name: fields.last_name || '' };
+  const [first = '', ...rest] = (fields.name || '').split(/\s+/).filter(Boolean);
+  return { first_name: first, last_name: fields.last_name || rest.join(' ') };
 };
 
 /**
- * Bulk import contacts
- * Imports multiple contacts at once
+ * Bulk import contacts from CSV
+ * Name (`name`, or `first_name` + optional `last_name`), `email` and `phone` are required.
+ * Recognised optional columns: role_title, company_id / company (matched by name), temperature, tags.
+ * Every other column is stored in the contact's custom_fields.
  */
 export const bulkImportContacts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -628,9 +604,9 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const contacts = parseCsv(req.file.buffer.toString('utf8'));
+    const { rows, custom_columns } = parseImportCsv(req.file.buffer.toString('utf8'), CONTACT_CSV_FIELDS);
 
-    if (contacts.length === 0) {
+    if (rows.length === 0) {
       res.status(400).json({
         status: false,
         message: 'CSV file must include a header row and at least one contact row'
@@ -638,34 +614,80 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
+    if (rows.length > MAX_IMPORT_ROWS) {
+      res.status(400).json({
+        status: false,
+        message: `CSV file can contain at most ${MAX_IMPORT_ROWS} contact rows`
+      });
+      return;
+    }
+
+    // Resolve company references in two queries instead of one per row
+    const companyIds = [...new Set(rows.map(({ fields }) => fields.company_id).filter((id) => id && mongoose.Types.ObjectId.isValid(id)))];
+    const companyNames = [...new Set(rows.map(({ fields }) => fields.company).filter(Boolean))];
+    const [companiesById, companiesByName] = await Promise.all([
+      companyIds.length
+        ? Company.find({ _id: { $in: companyIds }, organization_id: organizationId }).select('_id').lean()
+        : Promise.resolve([]),
+      companyNames.length
+        ? Company.find({ name: { $in: companyNames }, organization_id: organizationId })
+            .collation({ locale: 'en', strength: 2 })
+            .select('_id name')
+            .lean()
+        : Promise.resolve([])
+    ]);
+    const knownCompanyIds = new Set(companiesById.map((company) => company._id.toString()));
+    const companyIdByName = new Map(companiesByName.map((company) => [nameKey(company.name), company._id]));
+
     const errors: string[] = [];
     const validContacts: Record<string, unknown>[] = [];
 
-    for (let i = 0; i < contacts.length; i++) {
-      const contact = contacts[i];
-      if (!contact.first_name || !contact.last_name) {
-        errors.push(`Row ${i + 1}: first_name and last_name are required`);
-        continue;
+    rows.forEach(({ fields, custom_fields }, i) => {
+      const row = `Row ${i + 1}`;
+      const { first_name, last_name } = splitName(fields);
+      const missing = [!first_name && 'name', !fields.email && 'email', !fields.phone && 'phone'].filter(Boolean);
+
+      if (missing.length > 0) {
+        errors.push(`${row}: ${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`);
+        return;
       }
 
-      if (contact.company_id && !mongoose.Types.ObjectId.isValid(contact.company_id)) {
-        errors.push(`Row ${i + 1}: company_id is invalid`);
-        continue;
+      if (!isValidEmail(fields.email)) {
+        errors.push(`${row}: email is invalid`);
+        return;
+      }
+
+      if (!isValidPhone(fields.phone)) {
+        errors.push(`${row}: phone is invalid`);
+        return;
+      }
+
+      let companyId: mongoose.Types.ObjectId | undefined;
+      if (fields.company_id) {
+        if (!mongoose.Types.ObjectId.isValid(fields.company_id) || !knownCompanyIds.has(fields.company_id)) {
+          errors.push(`${row}: company_id is invalid`);
+          return;
+        }
+        companyId = new mongoose.Types.ObjectId(fields.company_id);
+      } else if (fields.company) {
+        companyId = companyIdByName.get(nameKey(fields.company));
       }
 
       validContacts.push({
-        first_name: contact.first_name,
-        last_name: contact.last_name,
-        email: contact.email,
-        phone: contact.phone,
-        role_title: contact.role_title,
-        company_id: contact.company_id ? new mongoose.Types.ObjectId(contact.company_id) : undefined,
-        temperature: parseTemperature(contact.temperature),
-        tags: parseTags(contact.tags),
+        first_name,
+        last_name,
+        email: fields.email.toLowerCase(),
+        phone: fields.phone,
+        role_title: fields.role_title || undefined,
+        company_id: companyId,
+        temperature: parseTemperature(fields.temperature),
+        tags: parseTags(fields.tags),
+        // An unmatched company name is kept rather than dropped
+        custom_fields: !companyId && fields.company ? { company: fields.company, ...custom_fields } : custom_fields,
         owner_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
         organization_id: organizationId
       });
-    }
+    });
 
     let imported = 0;
     if (validContacts.length > 0) {
@@ -676,7 +698,12 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
     res.json({
       status: true,
       message: 'Contacts imported successfully',
-      data: { imported, errors: errors.length > 0 ? errors : undefined }
+      data: {
+        imported,
+        failed: errors.length,
+        custom_columns,
+        errors: errors.length > 0 ? errors : undefined
+      }
     });
   } catch (error) {
     res.status(500).json({

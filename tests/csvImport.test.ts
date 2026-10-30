@@ -92,6 +92,16 @@ describe('parseImportCsv', () => {
     ]);
   });
 
+  it('strips exporter labels from phones and ignores blank headers (Meta Lead Ads export)', () => {
+    const { rows, custom_columns } = parseImportCsv(
+      'Priority,full_name,phone_number,email,,,\nHigh Intent,Ada Lovelace,p:+2348104611985,ada@example.com,,,\n',
+      { full_name: 'name', phone_number: 'phone', email: 'email' }
+    );
+
+    expect(custom_columns).toEqual(['Priority']);
+    expect(rows[0].fields.phone).toBe('+2348104611985');
+  });
+
   it('drops empty custom values and Mongo-unsafe key characters', () => {
     const { rows } = parseImportCsv('name,$weird.key,blank\nAda,x,\n', { name: 'name' });
     expect(rows[0].custom_fields).toEqual({ weird_key: 'x' });

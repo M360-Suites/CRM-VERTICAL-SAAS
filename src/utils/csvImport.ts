@@ -59,6 +59,9 @@ export const normalizeHeader = (header: string): string =>
 const toCustomFieldKey = (header: string): string =>
   header.replace(/^﻿/, '').trim().replace(/\./g, '_').replace(/^\$+/, '');
 
+/** Drops scheme-style labels exporters prepend, e.g. Meta Lead Ads "p:+234..." or "tel:+1..." */
+export const cleanPhone = (phone: string): string => phone.replace(/^[a-z]+:\s*/i, '');
+
 const parseCsvRows = (csv: string): string[][] => {
   const rows: string[][] = [];
   let current = '';
@@ -125,7 +128,8 @@ export const parseImportCsv = (csv: string, aliases: Record<string, string>): Pa
     const custom: Record<string, string> = {};
 
     headers.forEach((header, index) => {
-      const value = values[index]?.trim() ?? '';
+      const raw = values[index]?.trim() ?? '';
+      const value = header.field === 'phone' ? cleanPhone(raw) : raw;
       if (header.field) {
         // When two columns alias to one field, the first non-empty value wins
         if (!fields[header.field]) fields[header.field] = value;

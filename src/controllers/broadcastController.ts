@@ -15,17 +15,13 @@ import { renderEmail, sampleMergeValues } from '../utils/emailTemplateRender';
 import { isSenderConfigured, sendEmail } from '../utils/senderMailer';
 import { buildAudienceFilter, cancelBroadcast, startBroadcast } from '../services/broadcastService';
 import { logger } from '../config/logger';
+import { handleError } from '../utils/errorHandler';
 
 const MAX_HTML_LENGTH = 500_000;
 const MAX_AUDIENCE_IDS = 10_000;
 const BROADCAST_STATUSES = ['draft', 'scheduled', 'sending', 'sent', 'cancelled', 'failed'] as const;
 const RECIPIENT_STATUSES = ['queued', 'sending', 'sent', 'failed', 'bounced', 'complained', 'skipped'] as const;
 const TEMPERATURES: readonly Temperature[] = ['hot', 'warm', 'cold'];
-
-const handleError = (res: Response, error: unknown, message: string): void => {
-  logger.error({ err: error }, message);
-  res.status(500).json({ status: false, message });
-};
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

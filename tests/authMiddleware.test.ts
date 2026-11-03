@@ -38,6 +38,6 @@ describe('real authentication and authorization middleware', () => {
     const response = await request(app).get('/exports').set('Authorization', 'Bearer valid-token');
 
     expect(response.status).toBe(401);
-    expect(response.body.message).toBe('Organization is inactive');
+    expect(response.body.message).toBe('Your organization is inactive. Contact support to reactivate it.');
   });
 });

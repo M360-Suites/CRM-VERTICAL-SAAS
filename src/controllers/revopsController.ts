@@ -15,6 +15,7 @@ import {
 } from '../utils/revopsInput';
 import { DateRange, buildOverview, spendByPlatform } from '../services/revopsMetrics';
 import { logger } from '../config/logger';
+import { handleError } from '../utils/errorHandler';
 
 const DEFAULT_RANGE_DAYS = 30;
 
@@ -28,11 +29,6 @@ const parseRange = (req: AuthRequest, res: Response): DateRange | null => {
     return null;
   }
   return { from, to };
-};
-
-const handleError = (res: Response, error: unknown, message: string): void => {
-  logger.error({ err: error }, message);
-  res.status(500).json({ status: false, message });
 };
 
 /** Divide, returning null instead of Infinity/NaN; rounded to 4 decimals */

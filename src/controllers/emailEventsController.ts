@@ -14,6 +14,7 @@ import { BroadcastRecipient } from '../models/BroadcastRecipient';
 import { Broadcast } from '../models/Broadcast';
 import { TriggerRun } from '../models/TriggerRun';
 import { verifyUnsubscribeToken } from '../utils/emailTemplateRender';
+import { handleError } from '../utils/errorHandler';
 
 /* ---- Unsubscribe ---- */
 
@@ -159,7 +160,6 @@ export const handleSenderWebhook = async (req: Request, res: Response): Promise<
     for (const event of events) await applySenderBounce(event as Record<string, any>);
     res.json({ status: true });
   } catch (error) {
-    logger.error({ err: error }, 'Failed to handle Sender.net webhook');
-    res.status(500).json({ status: false, message: 'Failed to process webhook' });
+    handleError(res, error, 'Failed to process webhook');
   }
 };

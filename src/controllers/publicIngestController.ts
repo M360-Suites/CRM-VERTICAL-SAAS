@@ -6,6 +6,7 @@ import { AdConnector, AD_PLATFORMS, AdPlatform } from '../models/AdConnector';
 import { optionalDate, optionalEnum, optionalNumber, optionalString } from '../utils/revopsInput';
 import { ensureRevopsDefaults } from '../services/revopsDefaults';
 import { logger } from '../config/logger';
+import { handleError } from '../utils/errorHandler';
 
 const MAX_EVENTS = 500;
 
@@ -152,7 +153,6 @@ export const ingestAdEvents = async (req: IngestRequest, res: Response): Promise
 
     res.json({ status: true, data: { ingested: parsed.length, spend, platforms } });
   } catch (error) {
-    logger.error({ err: error }, 'Ad event ingestion failed');
-    res.status(500).json({ status: false, message: 'Ingestion failed' });
+    handleError(res, error, 'Ingestion failed');
   }
 };

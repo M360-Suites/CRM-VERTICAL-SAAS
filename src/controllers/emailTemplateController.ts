@@ -11,14 +11,10 @@ import { optionalObjectId, optionalString, parsePaging } from '../utils/revopsIn
 import { MERGE_VARIABLES, renderEmail, renderMergeTags, sampleMergeValues } from '../utils/emailTemplateRender';
 import { isSenderConfigured, sendEmail } from '../utils/senderMailer';
 import { logger } from '../config/logger';
+import { handleError } from '../utils/errorHandler';
 
 /** Generous cap — inline-styled canvas output gets large, but mail providers reject very large messages */
 const MAX_HTML_LENGTH = 500_000;
-
-const handleError = (res: Response, error: unknown, message: string): void => {
-  logger.error({ err: error }, message);
-  res.status(500).json({ status: false, message });
-};
 
 type TemplateInput = {
   name?: string;

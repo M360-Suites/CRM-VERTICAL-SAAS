@@ -3,6 +3,7 @@ import { AuthRequest } from '../types';
 import { SocialAccount } from '../models/SocialAccount';
 import { generateConnectUrl, disconnectAccount } from '../services/unipileService';
 import config from '../config';
+import { handleError } from '../utils/errorHandler';
 
 type SocialProvider = 'whatsapp' | 'instagram' | 'facebook';
 type InternalProvider = 'whatsapp' | 'instagram' | 'facebook_messenger';
@@ -30,7 +31,7 @@ export const listSocialAccounts = async (req: AuthRequest, res: Response): Promi
       data: accounts
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch social accounts' });
+    handleError(res, error, 'Failed to fetch social accounts');
   }
 };
 
@@ -139,6 +140,6 @@ export const disconnectSocialAccount = async (req: AuthRequest, res: Response): 
       message: 'Social account disconnected successfully'
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to disconnect social account' });
+    handleError(res, error, 'Failed to disconnect social account');
   }
 };

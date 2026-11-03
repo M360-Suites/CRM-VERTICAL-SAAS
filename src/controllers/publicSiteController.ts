@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { PublicKeyRequest } from '../middleware/publicAuth';
 import { Site } from '../models/Site';
+import { handleError } from '../utils/errorHandler';
 
 /**
  * Count how many sites are connected to the public key.
@@ -32,10 +33,6 @@ export const countSitesPublic = async (req: PublicKeyRequest, res: Response): Pr
       }
     });
   } catch (error) {
-    console.error('Public site count error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to count sites'
-    });
+    handleError(res, error, 'Failed to count sites');
   }
 };

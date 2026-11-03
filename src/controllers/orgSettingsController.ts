@@ -3,6 +3,7 @@ import { AuthRequest } from '../types';
 import { ASSIGNMENT_MODES, AssignmentMode, Organization } from '../models/Organization';
 import { generateApiKeys } from '../utils/apiKeys';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 /**
  * Get the current organization's API keys (public key + secret key)
@@ -34,11 +35,7 @@ export const getApiKeys = async (req: AuthRequest, res: Response): Promise<void>
       }
     });
   } catch (error) {
-    console.error('Get API keys error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to retrieve API keys'
-    });
+    handleError(res, error, 'Failed to retrieve API keys');
   }
 };
 
@@ -72,11 +69,7 @@ export const regeneratePublicKey = async (req: AuthRequest, res: Response): Prom
       }
     });
   } catch (error) {
-    console.error('Regenerate public key error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to regenerate public key'
-    });
+    handleError(res, error, 'Failed to regenerate public key');
   }
 };
 
@@ -110,11 +103,7 @@ export const regenerateSecretKey = async (req: AuthRequest, res: Response): Prom
       }
     });
   } catch (error) {
-    console.error('Regenerate secret key error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to regenerate secret key'
-    });
+    handleError(res, error, 'Failed to regenerate secret key');
   }
 };
 
@@ -162,11 +151,7 @@ export const revokeKey = async (req: AuthRequest, res: Response): Promise<void> 
       }
     });
   } catch (error) {
-    console.error('Revoke key error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to revoke key'
-    });
+    handleError(res, error, 'Failed to revoke key');
   }
 };
 
@@ -190,8 +175,7 @@ export const getAssignmentSettings = async (req: AuthRequest, res: Response): Pr
       data: { assignment_mode: organization.assignment_mode ?? 'auto' }
     });
   } catch (error) {
-    console.error('Get assignment settings error:', error);
-    res.status(500).json({ status: false, message: 'Failed to retrieve assignment settings' });
+    handleError(res, error, 'Failed to retrieve assignment settings');
   }
 };
 
@@ -227,7 +211,6 @@ export const updateAssignmentSettings = async (req: AuthRequest, res: Response):
       data: { assignment_mode: organization.assignment_mode }
     });
   } catch (error) {
-    console.error('Update assignment settings error:', error);
-    res.status(500).json({ status: false, message: 'Failed to update assignment settings' });
+    handleError(res, error, 'Failed to update assignment settings');
   }
 };

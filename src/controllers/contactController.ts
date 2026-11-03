@@ -12,6 +12,7 @@ import { Task } from '../models/Task';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, nameKey, parseImportCsv } from '../utils/csvImport';
+import { handleError } from '../utils/errorHandler';
 
 /** Query parameters for listing contacts */
 interface ContactQuery {
@@ -86,10 +87,7 @@ export const listContacts = async (req: AuthRequest, res: Response): Promise<voi
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch contacts'
-    });
+    handleError(res, error, 'Failed to fetch contacts');
   }
 };
 
@@ -114,10 +112,7 @@ export const getAllContacts = async (req: AuthRequest, res: Response): Promise<v
       data: contacts
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch all contacts'
-    });
+    handleError(res, error, 'Failed to fetch all contacts');
   }
 };
 
@@ -155,10 +150,7 @@ export const getContactById = async (req: AuthRequest, res: Response): Promise<v
 
     res.json({ status: true, message: 'Contact retrieved successfully', data: contact });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch contact'
-    });
+    handleError(res, error, 'Failed to fetch contact');
   }
 };
 
@@ -231,18 +223,7 @@ export const createContact = async (req: AuthRequest, res: Response): Promise<vo
 
     res.status(201).json({ status: true, message: 'Contact created successfully', data: populatedContact });
   } catch (error) {
-    if (error instanceof mongoose.Error.ValidationError) {
-      res.status(400).json({
-        status: false,
-        message: error.message
-      });
-      return;
-    }
-
-    res.status(500).json({
-      status: false,
-      message: 'Failed to create contact'
-    });
+    handleError(res, error, 'Failed to create contact');
   }
 };
 
@@ -309,10 +290,7 @@ export const updateContact = async (req: AuthRequest, res: Response): Promise<vo
 
     res.json({ status: true, message: 'Contact updated successfully', data: contact });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update contact'
-    });
+    handleError(res, error, 'Failed to update contact');
   }
 };
 
@@ -347,10 +325,7 @@ export const deleteContact = async (req: AuthRequest, res: Response): Promise<vo
 
     res.json({ status: true, message: 'Contact deleted successfully' });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to delete contact'
-    });
+    handleError(res, error, 'Failed to delete contact');
   }
 };
 
@@ -381,10 +356,7 @@ export const getContactActivities = async (req: AuthRequest, res: Response): Pro
 
     res.json({ status: true, message: 'Activities retrieved successfully', data: activities });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch activities'
-    });
+    handleError(res, error, 'Failed to fetch activities');
   }
 };
 
@@ -416,10 +388,7 @@ export const getContactDeals = async (req: AuthRequest, res: Response): Promise<
 
     res.json({ status: true, message: 'Deals retrieved successfully', data: deals });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch deals'
-    });
+    handleError(res, error, 'Failed to fetch deals');
   }
 };
 
@@ -451,10 +420,7 @@ export const getContactTasks = async (req: AuthRequest, res: Response): Promise<
 
     res.json({ status: true, message: 'Tasks retrieved successfully', data: tasks });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch tasks'
-    });
+    handleError(res, error, 'Failed to fetch tasks');
   }
 };
 
@@ -533,10 +499,7 @@ export const exportContacts = async (req: AuthRequest, res: Response): Promise<v
     res.setHeader('Content-Disposition', 'attachment; filename="contacts.csv"');
     res.send(csv);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to export contacts'
-    });
+    handleError(res, error, 'Failed to export contacts');
   }
 };
 
@@ -706,9 +669,6 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to import contacts'
-    });
+    handleError(res, error, 'Failed to import contacts');
   }
 };

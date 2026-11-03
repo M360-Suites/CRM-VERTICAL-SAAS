@@ -6,6 +6,7 @@ import { Deal } from '../models/Deal';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, parseImportCsv } from '../utils/csvImport';
+import { handleError } from '../utils/errorHandler';
 
 interface CompanyQuery {
   page?: number;
@@ -141,10 +142,7 @@ export const listCompanies = async (req: AuthRequest, res: Response): Promise<vo
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch companies'
-    });
+    handleError(res, error, 'Failed to fetch companies');
   }
 };
 
@@ -179,10 +177,7 @@ export const getCompanyById = async (req: AuthRequest, res: Response): Promise<v
 
     res.json({ status: true, message: 'Company retrieved successfully', data: companyWithStats });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch company'
-    });
+    handleError(res, error, 'Failed to fetch company');
   }
 };
 
@@ -246,10 +241,7 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
 
     res.status(201).json({ status: true, message: 'Company created successfully', data: companyWithStats });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to create company'
-    });
+    handleError(res, error, 'Failed to create company');
   }
 };
 
@@ -344,10 +336,7 @@ export const bulkImportCompanies = async (req: AuthRequest, res: Response): Prom
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to import companies'
-    });
+    handleError(res, error, 'Failed to import companies');
   }
 };
 
@@ -397,10 +386,7 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
 
     res.json({ status: true, message: 'Company updated successfully', data: companyWithStats });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update company'
-    });
+    handleError(res, error, 'Failed to update company');
   }
 };
 
@@ -431,10 +417,7 @@ export const deleteCompany = async (req: AuthRequest, res: Response): Promise<vo
 
     res.json({ status: true, message: 'Company deleted successfully' });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to delete company'
-    });
+    handleError(res, error, 'Failed to delete company');
   }
 };
 
@@ -460,10 +443,7 @@ export const getCompanyContacts = async (req: AuthRequest, res: Response): Promi
 
     res.json({ status: true, message: 'Company contacts retrieved successfully', data: contacts });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch company contacts'
-    });
+    handleError(res, error, 'Failed to fetch company contacts');
   }
 };
 
@@ -491,10 +471,7 @@ export const getCompanyDeals = async (req: AuthRequest, res: Response): Promise<
 
     res.json({ status: true, message: 'Company deals retrieved successfully', data: deals });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch company deals'
-    });
+    handleError(res, error, 'Failed to fetch company deals');
   }
 };
 
@@ -522,10 +499,7 @@ export const getCompanyStats = async (req: AuthRequest, res: Response): Promise<
       data: stats
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch company stats'
-    });
+    handleError(res, error, 'Failed to fetch company stats');
   }
 };
 
@@ -554,10 +528,7 @@ export const listCompaniesSelect = async (req: AuthRequest, res: Response): Prom
       data: companies
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch companies'
-    });
+    handleError(res, error, 'Failed to fetch companies');
   }
 };
 
@@ -625,9 +596,6 @@ export const exportCompanies = async (req: AuthRequest, res: Response): Promise<
     res.setHeader('Content-Disposition', 'attachment; filename="companies.csv"');
     res.send(csv);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to export companies'
-    });
+    handleError(res, error, 'Failed to export companies');
   }
 };

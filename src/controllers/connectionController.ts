@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { SocialAccount } from '../models/SocialAccount';
 import { EmailMessage } from '../models/EmailMessage';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 const PROVIDER_MAP: Record<string, string> = {
   whatsapp: 'whatsapp',
@@ -62,6 +63,6 @@ export const getConnectionStatuses = async (req: AuthRequest, res: Response): Pr
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to get connection statuses' });
+    handleError(res, error, 'Failed to get connection statuses');
   }
 };

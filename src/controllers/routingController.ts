@@ -9,11 +9,7 @@ import { requireOrganization } from '../utils/tenant';
 import { optionalEnum, optionalNumber, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { ROUTABLE_ROLES, matchRoutingRule } from '../services/leadRoutingService';
 import { logger } from '../config/logger';
-
-const handleError = (res: Response, error: unknown, message: string): void => {
-  logger.error({ err: error }, message);
-  res.status(500).json({ status: false, message });
-};
+import { handleError } from '../utils/errorHandler';
 
 type RuleInput = {
   name?: string;

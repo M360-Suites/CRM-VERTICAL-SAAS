@@ -27,21 +27,34 @@ export const validateBody = (schema: Schema) => (
 
     if (value === undefined || value === null) continue;
 
+    const actualType = Array.isArray(value) ? 'array' : typeof value;
+
     if (rule.type === 'array') {
-      if (!Array.isArray(value)) errors.push(`${field} must be an array`);
+      if (!Array.isArray(value)) errors.push(`${field} must be an array (received ${actualType})`);
     } else if (rule.type && typeof value !== rule.type) {
-      errors.push(`${field} must be a ${rule.type}`);
+      errors.push(`${field} must be a ${rule.type} (received ${actualType})`);
     }
 
     if (typeof value === 'string') {
-      if (rule.minLength && value.length < rule.minLength) errors.push(`${field} is too short`);
-      if (rule.maxLength && value.length > rule.maxLength) errors.push(`${field} is too long`);
-      if (rule.enum && !rule.enum.includes(value)) errors.push(`${field} has an invalid value`);
+      if (rule.minLength && value.length < rule.minLength) {
+        errors.push(`${field} must be at least ${rule.minLength} characters long (received ${value.length})`);
+      }
+      if (rule.maxLength && value.length > rule.maxLength) {
+        errors.push(`${field} must be at most ${rule.maxLength} characters long (received ${value.length})`);
+      }
+      if (rule.enum && !rule.enum.includes(value)) {
+        errors.push(`${field} must be one of: ${rule.enum.join(', ')} (received "${value}")`);
+      }
     }
   }
 
   if (errors.length > 0) {
-    res.status(400).json({ status: false, message: 'Validation failed', errors });
+    res.status(400).json({
+      status: false,
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      errors
+    });
     return;
   }
 

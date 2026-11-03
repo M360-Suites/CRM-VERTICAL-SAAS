@@ -19,6 +19,7 @@ import {
 } from '../utils/googleAds';
 import { syncGoogleAdsConnector } from '../services/googleAdsSyncService';
 import { logger } from '../config/logger';
+import { handleError } from '../utils/errorHandler';
 
 const STATE_PURPOSE = 'google_ads_oauth';
 const MANAGER_ROLES = ['admin', 'sales_manager'];
@@ -80,8 +81,7 @@ export const getGoogleAdsAuthUrl = async (req: AuthRequest, res: Response): Prom
 
     res.json({ status: true, data: { url } });
   } catch (error) {
-    logger.error({ err: error }, 'Failed to generate Google Ads auth URL');
-    res.status(500).json({ status: false, message: 'Failed to generate auth URL' });
+    handleError(res, error, 'Failed to generate auth URL');
   }
 };
 
@@ -155,7 +155,7 @@ export const getGoogleAdsStatus = async (req: AuthRequest, res: Response): Promi
       data: { configured: isGoogleAdsConfigured(), ...serializeConnector(connector) }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to get Google Ads status' });
+    handleError(res, error, 'Failed to get Google Ads status');
   }
 };
 
@@ -247,8 +247,7 @@ export const selectGoogleAdsAccount = async (req: AuthRequest, res: Response): P
       res.status(409).json({ status: false, message: 'Google Ads authorization expired. Reconnect Google Ads.' });
       return;
     }
-    logger.error({ err: error }, 'Failed to select Google Ads account');
-    res.status(500).json({ status: false, message: 'Failed to connect Google Ads account' });
+    handleError(res, error, 'Failed to connect Google Ads account');
   }
 };
 
@@ -292,8 +291,7 @@ export const syncGoogleAdsNow = async (req: AuthRequest, res: Response): Promise
       res.status(409).json({ status: false, message: 'A sync is already running' });
       return;
     }
-    logger.error({ err: error }, 'Manual Google Ads sync failed');
-    res.status(500).json({ status: false, message: 'Failed to sync Google Ads' });
+    handleError(res, error, 'Failed to sync Google Ads');
   }
 };
 
@@ -330,7 +328,6 @@ export const disconnectGoogleAds = async (req: AuthRequest, res: Response): Prom
 
     res.json({ status: true, message: 'Google Ads disconnected' });
   } catch (error) {
-    logger.error({ err: error }, 'Failed to disconnect Google Ads');
-    res.status(500).json({ status: false, message: 'Failed to disconnect Google Ads' });
+    handleError(res, error, 'Failed to disconnect Google Ads');
   }
 };

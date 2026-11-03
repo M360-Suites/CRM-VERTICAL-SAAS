@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../types';
 import { Notification } from '../models/Notification';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 export const listNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -38,7 +39,7 @@ export const listNotifications = async (req: AuthRequest, res: Response): Promis
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch notifications' });
+    handleError(res, error, 'Failed to fetch notifications');
   }
 };
 
@@ -67,7 +68,7 @@ export const markNotificationRead = async (req: AuthRequest, res: Response): Pro
       data: notification
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to update notification' });
+    handleError(res, error, 'Failed to update notification');
   }
 };
 
@@ -89,6 +90,6 @@ export const markAllNotificationsRead = async (req: AuthRequest, res: Response):
       message: 'All notifications marked as read'
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to mark notifications as read' });
+    handleError(res, error, 'Failed to mark notifications as read');
   }
 };

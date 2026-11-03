@@ -18,11 +18,7 @@ import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { requireOrganization } from '../utils/tenant';
 import { optionalEnum, optionalNumber, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { logger } from '../config/logger';
-
-const handleError = (res: Response, error: unknown, message: string): void => {
-  logger.error({ err: error }, message);
-  res.status(500).json({ status: false, message });
-};
+import { handleError } from '../utils/errorHandler';
 
 type TriggerInput = {
   name?: string;

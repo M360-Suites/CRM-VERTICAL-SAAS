@@ -50,6 +50,7 @@ import { startGoogleAdsSyncService } from './src/services/googleAdsSyncService';
 import { startEmailDispatchService } from './src/services/emailDispatchService';
 import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
+import { handleError } from './src/utils/errorHandler';
 import { MidlineAgent, midlineMiddleware, midlineErrorHandler } from 'midline-agent';
 
 const app = express();
@@ -171,23 +172,22 @@ app.use('/api/v1/email-triggers', emailTriggerRoutes);
 app.use('/api/v1/broadcasts', broadcastRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
+/** Unknown routes */
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    status: false,
+    message: `Route not found: ${req.method} ${req.originalUrl.split('?')[0]}`,
+    code: 'NOT_FOUND'
+  });
+});
+
 /** Midline error recording — runs before the global handler, forwards errors unchanged */
 app.use(midlineErrorHandler());
 
-/** Global error handler */
+/** Global error handler — anything thrown or passed to next(err) ends up here */
 app.use((err: RequestParseError, req: Request, res: Response, next: NextFunction) => {
-  if (err instanceof SyntaxError && err.status === 400 && err.type === 'entity.parse.failed') {
-    return res.status(400).json({
-      status: false,
-      message: 'Invalid JSON in request body'
-    });
-  }
-
-  logger.error({ err }, err.message);
-  res.status(500).json({
-    status: false,
-    message: 'Something went wrong'
-  });
+  if (res.headersSent) return next(err);
+  handleError(res, err, `Failed to process ${req.method} ${req.originalUrl.split('?')[0]}`);
 });
 
 /**

@@ -5,6 +5,7 @@ import { Folder } from '../models/Folder';
 import { AuthRequest } from '../types';
 import cloudinary from '../config/cloudinary';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 type FolderModifier = {
   _id: mongoose.Types.ObjectId;
@@ -172,7 +173,7 @@ export const getFolders = async (req: AuthRequest, res: Response): Promise<void>
       data: folders
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch folders' });
+    handleError(res, error, 'Failed to fetch folders');
   }
 };
 
@@ -216,7 +217,7 @@ export const getFolderById = async (req: AuthRequest, res: Response): Promise<vo
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch folder' });
+    handleError(res, error, 'Failed to fetch folder');
   }
 };
 
@@ -253,7 +254,7 @@ export const createFolder = async (req: AuthRequest, res: Response): Promise<voi
       data: folder
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to create folder' });
+    handleError(res, error, 'Failed to create folder');
   }
 };
 
@@ -311,7 +312,7 @@ export const updateFolder = async (req: AuthRequest, res: Response): Promise<voi
       data: folder
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to update folder' });
+    handleError(res, error, 'Failed to update folder');
   }
 };
 
@@ -344,7 +345,7 @@ export const deleteFolder = async (req: AuthRequest, res: Response): Promise<voi
       data: { deleted_documents: documents.length }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to delete folder' });
+    handleError(res, error, 'Failed to delete folder');
   }
 };
 
@@ -418,7 +419,7 @@ export const uploadDocumentsToFolder = async (req: AuthRequest, res: Response): 
       data: documents
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to upload documents' });
+    handleError(res, error, 'Failed to upload documents');
   }
 };
 
@@ -455,7 +456,7 @@ export const getFolderDocuments = async (req: AuthRequest, res: Response): Promi
       data: documents
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch folder documents' });
+    handleError(res, error, 'Failed to fetch folder documents');
   }
 };
 
@@ -490,7 +491,7 @@ export const downloadDocument = async (req: AuthRequest, res: Response): Promise
 
     res.redirect(downloadUrl);
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to download document' });
+    handleError(res, error, 'Failed to download document');
   }
 };
 
@@ -574,7 +575,7 @@ export const updateDocument = async (req: AuthRequest, res: Response): Promise<v
       data: document
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to update document' });
+    handleError(res, error, 'Failed to update document');
   }
 };
 
@@ -608,6 +609,6 @@ export const deleteDocument = async (req: AuthRequest, res: Response): Promise<v
 
     res.json({ status: true, message: 'Document deleted successfully' });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to delete document' });
+    handleError(res, error, 'Failed to delete document');
   }
 };

@@ -13,6 +13,7 @@ import {
   revokeInvitation,
   acceptInvitation,
   deleteUser,
+  deleteStaff,
   getUserRole,
   assignRole,
   removeRole
@@ -299,6 +300,44 @@ router.patch('/:id', authenticate, authorize('admin'), validateBody({
  *         description: User not found
  */
 router.delete('/:id', authenticate, authorize('admin'), deleteUser);
+
+/**
+ * @swagger
+ * /users/{id}/permanent:
+ *   delete:
+ *     summary: Permanently delete a staff member
+ *     description: >
+ *       Admin-only. Permanently removes a staff member from the authenticated admin's organization.
+ *       Deals, contacts, companies, tasks, documents and folders they own are reassigned to
+ *       `reassign_to` (defaults to the admin making the request). They are removed from task and
+ *       pipeline-stage assignees and routing rules. Admins cannot delete themselves or the organization owner.
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: reassign_to
+ *         required: false
+ *         description: User ID to receive the deleted staff member's records (may also be sent in the JSON body)
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Staff member deleted and records reassigned
+ *       400:
+ *         description: Invalid ID, self-deletion, or invalid reassign_to
+ *       404:
+ *         description: Staff member not found in this organization
+ *       409:
+ *         description: Staff member is the organization owner
+ */
+router.delete('/:id/permanent', authenticate, authorize('admin'), deleteStaff);
 
 /**
  * @swagger

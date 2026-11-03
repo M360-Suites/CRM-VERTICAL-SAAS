@@ -19,6 +19,7 @@ import { requireOrganization } from '../utils/tenant';
 import { decryptString } from '../utils/crypto';
 import { createRawEmail, getAuthedGmail, RawEmailAttachment } from '../utils/gmail';
 import { clearGmailConnection, getSafeGoogleErrorLog, isInvalidGoogleGrantError } from '../utils/gmailConnection';
+import { handleError } from '../utils/errorHandler';
 
 interface GenerateEmailBody {
   contact_id?: string;
@@ -294,11 +295,7 @@ export const generateEmailHandler = async (req: AuthRequest, res: Response): Pro
       data: emailData
     });
   } catch (error) {
-    console.error('Email generation error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to generate email'
-    });
+    handleError(res, error, 'Failed to generate email');
   }
 };
 

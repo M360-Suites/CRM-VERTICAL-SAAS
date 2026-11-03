@@ -15,6 +15,7 @@ import { requireOrganization } from '../utils/tenant';
 import { ensureUserOrganization, makeOrganizationSlug } from '../utils/organization';
 import { generateApiKeys } from '../utils/apiKeys';
 import { getFrontendUrl } from '../utils/frontend';
+import { handleError } from '../utils/errorHandler';
 
 const COOKIE_NAMES = {
   ACCESS_TOKEN: 'crm_AT',
@@ -204,11 +205,7 @@ export const signup = async (req: AuthRequest, res: Response): Promise<void> => 
       data: {}
     });
   } catch (error) {
-    console.error('Signup error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to create user'
-    });
+    handleError(res, error, 'Failed to create user');
   }
 };
 
@@ -312,11 +309,7 @@ export const verifyEmail = async (req: AuthRequest, res: Response): Promise<void
       data: {}
     });
   } catch (error) {
-    console.error('Verify email error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to verify email'
-    });
+    handleError(res, error, 'Failed to verify email');
   }
 };
 
@@ -462,10 +455,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to login'
-    });
+    handleError(res, error, 'Failed to login');
   }
 };
 
@@ -498,10 +488,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch user'
-    });
+    handleError(res, error, 'Failed to fetch user');
   }
 };
 
@@ -545,10 +532,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update user'
-    });
+    handleError(res, error, 'Failed to update user');
   }
 };
 
@@ -573,10 +557,7 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
 
     res.json({ status: true, message: 'Auth URL generated successfully', data: { url: authUrl } });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to generate auth URL'
-    });
+    handleError(res, error, 'Failed to generate auth URL');
   }
 };
 
@@ -651,10 +632,7 @@ export const googleCallback = async (req: AuthRequest, res: Response): Promise<v
 
     res.redirect(redirectUrl);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to complete Google auth'
-    });
+    handleError(res, error, 'Failed to complete Google auth');
   }
 };
 
@@ -805,11 +783,7 @@ export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> 
       data: { resetToken }
     });
   } catch (error) {
-    console.error('Verify OTP error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to verify OTP'
-    });
+    handleError(res, error, 'Failed to verify OTP');
   }
 };
 
@@ -865,10 +839,6 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       data: {}
     });
   } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to reset password'
-    });
+    handleError(res, error, 'Failed to reset password');
   }
 };

@@ -16,6 +16,7 @@ import { LEAD_VALUE_FIELDS, parseLeadValue } from '../utils/leadValue';
 import { ensureRevopsDefaults } from '../services/revopsDefaults';
 import { queueDealTriggers } from '../services/triggerService';
 import { extractCustomFields } from '../utils/customFields';
+import { handleError } from '../utils/errorHandler';
 
 interface LeadCaptureBody {
   name?: string;
@@ -350,10 +351,6 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       }
     });
   } catch (error) {
-    logger.error({ err: error }, 'Lead capture error');
-    res.status(500).json({
-      status: false,
-      message: 'Failed to capture lead'
-    });
+    handleError(res, error, 'Failed to capture lead');
   }
 };

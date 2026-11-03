@@ -13,6 +13,7 @@ import { AuthRequest, ApiResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { emitStageMessage } from '../services/socketService';
 import { sendStageCommentEmail } from '../utils/email';
+import { handleError } from '../utils/errorHandler';
 
 const MAX_CONTENT_LENGTH = 5000;
 const MAX_MENTIONS = 50;
@@ -235,7 +236,7 @@ export const listStageMessages = async (req: AuthRequest, res: Response): Promis
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch stage messages' });
+    handleError(res, error, 'Failed to fetch stage messages');
   }
 };
 
@@ -342,7 +343,7 @@ export const createStageMessage = async (req: AuthRequest, res: Response): Promi
       data: populated ? formatMessage(populated, req.user?.id) : null
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to post message' });
+    handleError(res, error, 'Failed to post message');
   }
 };
 
@@ -434,7 +435,7 @@ export const updateStageMessage = async (req: AuthRequest, res: Response): Promi
       data: updated ? formatMessage(updated, req.user?.id) : null
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to update message' });
+    handleError(res, error, 'Failed to update message');
   }
 };
 
@@ -479,6 +480,6 @@ export const deleteStageMessage = async (req: AuthRequest, res: Response): Promi
 
     res.json({ status: true, message: 'Message deleted successfully' });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to delete message' });
+    handleError(res, error, 'Failed to delete message');
   }
 };

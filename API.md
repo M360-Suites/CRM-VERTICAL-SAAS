@@ -267,6 +267,7 @@ All user routes require admin role.
 | GET | /users/:id | Get user by ID |
 | POST | /users | Create user |
 | DELETE | /users/:id | Deactivate user |
+| DELETE | /users/:id/permanent | Permanently delete staff member (optional `reassign_to` user ID in body or query; their records are reassigned to that user, or to the requesting admin) |
 | GET | /users/:id/role | Get user role |
 | POST | /users/:id/role | Assign role to user |
 | DELETE | /users/:id/role | Remove user role |

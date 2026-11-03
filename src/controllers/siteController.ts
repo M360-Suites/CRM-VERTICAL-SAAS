@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Site } from '../models/Site';
 import { AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 interface SiteQuery {
   page?: number;
@@ -56,11 +57,7 @@ export const listSites = async (req: AuthRequest, res: Response): Promise<void> 
       }
     });
   } catch (error) {
-    console.error('List sites error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to retrieve sites'
-    });
+    handleError(res, error, 'Failed to retrieve sites');
   }
 };
 
@@ -95,11 +92,7 @@ export const countSites = async (req: AuthRequest, res: Response): Promise<void>
       }
     });
   } catch (error) {
-    console.error('Count sites error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to count sites'
-    });
+    handleError(res, error, 'Failed to count sites');
   }
 };
 
@@ -154,11 +147,7 @@ export const registerSite = async (req: AuthRequest, res: Response): Promise<voi
       data: site
     });
   } catch (error) {
-    console.error('Register site error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to register site'
-    });
+    handleError(res, error, 'Failed to register site');
   }
 };
 
@@ -199,11 +188,7 @@ export const updateSite = async (req: AuthRequest, res: Response): Promise<void>
       data: site
     });
   } catch (error) {
-    console.error('Update site error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update site'
-    });
+    handleError(res, error, 'Failed to update site');
   }
 };
 
@@ -238,10 +223,6 @@ export const deleteSite = async (req: AuthRequest, res: Response): Promise<void>
       message: 'Site deleted successfully'
     });
   } catch (error) {
-    console.error('Delete site error:', error);
-    res.status(500).json({
-      status: false,
-      message: 'Failed to delete site'
-    });
+    handleError(res, error, 'Failed to delete site');
   }
 };

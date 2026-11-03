@@ -9,6 +9,7 @@ import { decryptString, encryptString } from '../utils/crypto';
 import { GMAIL_SCOPES, getAuthedGmail, getEmailOAuth2Client } from '../utils/gmail';
 import { clearGmailConnection, getSafeGoogleErrorLog, isInvalidGoogleGrantError } from '../utils/gmailConnection';
 import { getFrontendUrl } from '../utils/frontend';
+import { handleError } from '../utils/errorHandler';
 
 type GoogleOAuthError = {
   message?: string;
@@ -100,7 +101,7 @@ export const getGmailAuthUrl = async (req: AuthRequest, res: Response): Promise<
 
     res.json({ status: true, data: { url } });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to generate auth URL' });
+    handleError(res, error, 'Failed to generate auth URL');
   }
 };
 
@@ -281,7 +282,7 @@ export const syncGmailInbox = async (req: AuthRequest, res: Response): Promise<v
       res.status(401).json({ status: false, message: 'Gmail access expired. Please re-authorize.' });
       return;
     }
-    res.status(500).json({ status: false, message: 'Failed to sync Gmail inbox' });
+    handleError(res, error, 'Failed to sync Gmail inbox');
   }
 };
 
@@ -331,8 +332,7 @@ export const disconnectGmail = async (req: AuthRequest, res: Response): Promise<
       }
     });
   } catch (error) {
-    console.error('Gmail disconnect error:', error);
-    res.status(500).json({ status: false, message: 'Failed to disconnect Gmail' });
+    handleError(res, error, 'Failed to disconnect Gmail');
   }
 };
 
@@ -386,7 +386,7 @@ export const listSyncedMessages = async (req: AuthRequest, res: Response): Promi
       },
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch messages' });
+    handleError(res, error, 'Failed to fetch messages');
   }
 };
 
@@ -436,7 +436,7 @@ export const createContactFromSender = async (req: AuthRequest, res: Response): 
 
     res.status(201).json({ status: true, message: 'Contact created from sender', data: { contact } });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to create contact' });
+    handleError(res, error, 'Failed to create contact');
   }
 };
 
@@ -471,7 +471,7 @@ export const linkMessageToContact = async (req: AuthRequest, res: Response): Pro
 
     res.json({ status: true, message: 'Message linked to contact', data: { message } });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to link message' });
+    handleError(res, error, 'Failed to link message');
   }
 };
 
@@ -505,6 +505,6 @@ export const gmailStatus = async (req: AuthRequest, res: Response): Promise<void
       },
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to get Gmail status' });
+    handleError(res, error, 'Failed to get Gmail status');
   }
 };

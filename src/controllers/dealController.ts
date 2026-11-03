@@ -12,6 +12,7 @@ import { parseLeadValue } from '../utils/leadValue';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
 import { assignDealOwner } from '../services/dealAssignmentService';
+import { handleError } from '../utils/errorHandler';
 
 interface DealQuery {
   page?: number;
@@ -94,10 +95,7 @@ export const listDeals = async (req: AuthRequest, res: Response): Promise<void> 
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch deals'
-    });
+    handleError(res, error, 'Failed to fetch deals');
   }
 };
 
@@ -120,10 +118,7 @@ export const getAllDeals = async (req: AuthRequest, res: Response): Promise<void
       data: deals
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch all deals'
-    });
+    handleError(res, error, 'Failed to fetch all deals');
   }
 };
 
@@ -159,10 +154,7 @@ export const getDealById = async (req: AuthRequest, res: Response): Promise<void
 
     res.json({ status: true, message: 'Deal retrieved successfully', data: deal });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch deal'
-    });
+    handleError(res, error, 'Failed to fetch deal');
   }
 };
 
@@ -274,10 +266,7 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
 
     res.status(201).json({ status: true, message: 'Deal created successfully', data: populatedDeal });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to create deal'
-    });
+    handleError(res, error, 'Failed to create deal');
   }
 };
 
@@ -444,10 +433,7 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
 
     res.json({ status: true, message: 'Deal updated successfully', data: deal });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update deal'
-    });
+    handleError(res, error, 'Failed to update deal');
   }
 };
 
@@ -478,10 +464,7 @@ export const deleteDeal = async (req: AuthRequest, res: Response): Promise<void>
 
     res.json({ status: true, message: 'Deal deleted successfully' });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to delete deal'
-    });
+    handleError(res, error, 'Failed to delete deal');
   }
 };
 
@@ -508,10 +491,7 @@ export const getDealActivities = async (req: AuthRequest, res: Response): Promis
 
     res.json({ status: true, message: 'Deal activities retrieved successfully', data: activities });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch activities'
-    });
+    handleError(res, error, 'Failed to fetch activities');
   }
 };
 
@@ -540,10 +520,7 @@ export const getDealTasks = async (req: AuthRequest, res: Response): Promise<voi
 
     res.json({ status: true, message: 'Deal tasks retrieved successfully', data: tasks });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch tasks'
-    });
+    handleError(res, error, 'Failed to fetch tasks');
   }
 };
 
@@ -591,10 +568,7 @@ export const getDealStats = async (req: AuthRequest, res: Response): Promise<voi
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch deal stats'
-    });
+    handleError(res, error, 'Failed to fetch deal stats');
   }
 };
 
@@ -721,10 +695,7 @@ export const updateDealStage = async (req: AuthRequest, res: Response): Promise<
 
     res.json({ status: true, message: 'Deal stage updated successfully', data: deal });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update deal stage'
-    });
+    handleError(res, error, 'Failed to update deal stage');
   }
 };
 
@@ -837,10 +808,7 @@ export const bulkUpdateStage = async (req: AuthRequest, res: Response): Promise<
       data: { modified: result.modifiedCount, skipped_invalid: invalidIds.length > 0 ? invalidIds : undefined }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update deals'
-    });
+    handleError(res, error, 'Failed to update deals');
   }
 };
 
@@ -882,7 +850,7 @@ export const assignDeal = async (req: AuthRequest, res: Response): Promise<void>
       data: result.deal
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to assign deal' });
+    handleError(res, error, 'Failed to assign deal');
   }
 };
 
@@ -1166,9 +1134,6 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to import deals'
-    });
+    handleError(res, error, 'Failed to import deals');
   }
 };

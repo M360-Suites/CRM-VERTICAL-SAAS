@@ -9,6 +9,7 @@ import { User } from '../models/User';
 import { AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { generateAnalyticsBreakdown } from '../utils/groq';
+import { handleError } from '../utils/errorHandler';
 
 type DateRange = {
   from?: Date;
@@ -315,7 +316,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response): Promise<voi
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch analytics' });
+    handleError(res, error, 'Failed to fetch analytics');
   }
 };
 
@@ -329,7 +330,7 @@ export const getAnalyticsSummary = async (req: AuthRequest, res: Response): Prom
       data: await getSummary(organizationId, parseDateRange(req))
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch analytics summary' });
+    handleError(res, error, 'Failed to fetch analytics summary');
   }
 };
 
@@ -343,7 +344,7 @@ export const getAnalyticsPipelineByStage = async (req: AuthRequest, res: Respons
       data: await getPipelineByStage(organizationId, parseDateRange(req))
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch pipeline analytics' });
+    handleError(res, error, 'Failed to fetch pipeline analytics');
   }
 };
 
@@ -357,7 +358,7 @@ export const getAnalyticsLeadSources = async (req: AuthRequest, res: Response): 
       data: await getLeadSources(organizationId, parseDateRange(req))
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch lead sources' });
+    handleError(res, error, 'Failed to fetch lead sources');
   }
 };
 
@@ -371,7 +372,7 @@ export const getAnalyticsTeamProductivity = async (req: AuthRequest, res: Respon
       data: await getTeamProductivity(organizationId, parseDateRange(req))
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch team productivity' });
+    handleError(res, error, 'Failed to fetch team productivity');
   }
 };
 
@@ -385,7 +386,7 @@ export const getAnalyticsTaskSummary = async (req: AuthRequest, res: Response): 
       data: await getTaskSummary(organizationId, parseDateRange(req))
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch task summary' });
+    handleError(res, error, 'Failed to fetch task summary');
   }
 };
 
@@ -435,7 +436,6 @@ export const getAnalyticsAiBreakdown = async (req: AuthRequest, res: Response): 
       }
     });
   } catch (error) {
-    console.error('AI analytics breakdown error:', error);
-    res.status(500).json({ status: false, message: 'Failed to generate AI analytics breakdown' });
+    handleError(res, error, 'Failed to generate AI analytics breakdown');
   }
 };

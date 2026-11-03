@@ -80,7 +80,7 @@ describe('auth HTTP API', () => {
     });
 
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({ status: false, message: 'Validation failed', errors: ['password is too short'] });
+    expect(response.body).toMatchObject({ status: false, message: 'Validation failed', errors: ['password must be at least 8 characters long (received 5)'] });
     expect(createOrganization).not.toHaveBeenCalled();
   });
 

@@ -5,6 +5,7 @@ import { Deal } from '../models/Deal';
 import { PipelineStage } from '../models/Pipeline';
 import { AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 type DateRange = {
   from?: Date;
@@ -241,7 +242,7 @@ export const getReports = async (req: AuthRequest, res: Response): Promise<void>
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch reports' });
+    handleError(res, error, 'Failed to fetch reports');
   }
 };
 
@@ -255,7 +256,7 @@ export const getReportsSummary = async (req: AuthRequest, res: Response): Promis
       data: await getSummary(organizationId, parseDateRange(req))
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch reports summary' });
+    handleError(res, error, 'Failed to fetch reports summary');
   }
 };
 
@@ -269,7 +270,7 @@ export const getReportsPipelineByStage = async (req: AuthRequest, res: Response)
       data: await getPipelineByStage(organizationId)
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch pipeline report' });
+    handleError(res, error, 'Failed to fetch pipeline report');
   }
 };
 
@@ -283,7 +284,7 @@ export const getReportsDealSourceMix = async (req: AuthRequest, res: Response): 
       data: await getDealSourceMix(organizationId)
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch deal source mix' });
+    handleError(res, error, 'Failed to fetch deal source mix');
   }
 };
 
@@ -297,7 +298,7 @@ export const getReportsContactTemperature = async (req: AuthRequest, res: Respon
       data: await getContactTemperature(organizationId)
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch contact temperature' });
+    handleError(res, error, 'Failed to fetch contact temperature');
   }
 };
 
@@ -334,6 +335,6 @@ export const exportReports = async (req: AuthRequest, res: Response): Promise<vo
       summary.lost_value.current
     ]]);
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to export report' });
+    handleError(res, error, 'Failed to export report');
   }
 };

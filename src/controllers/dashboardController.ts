@@ -7,6 +7,7 @@ import { PipelineStage } from '../models/Pipeline';
 import { Task } from '../models/Task';
 import { AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 type DateRange = {
   from?: Date;
@@ -321,7 +322,7 @@ export const getDashboardSummary = async (req: AuthRequest, res: Response): Prom
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch dashboard summary' });
+    handleError(res, error, 'Failed to fetch dashboard summary');
   }
 };
 
@@ -398,7 +399,7 @@ export const getSalesReport = async (req: AuthRequest, res: Response): Promise<v
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch sales report' });
+    handleError(res, error, 'Failed to fetch sales report');
   }
 };
 
@@ -440,7 +441,7 @@ export const getTaskReport = async (req: AuthRequest, res: Response): Promise<vo
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch task report' });
+    handleError(res, error, 'Failed to fetch task report');
   }
 };
 
@@ -484,7 +485,7 @@ export const getActivityReport = async (req: AuthRequest, res: Response): Promis
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch activity report' });
+    handleError(res, error, 'Failed to fetch activity report');
   }
 };
 
@@ -545,6 +546,6 @@ export const exportDashboardReport = async (req: AuthRequest, res: Response): Pr
     res.setHeader('Content-Disposition', 'attachment; filename="sales-report.csv"');
     res.send([headers.join(','), ...rows].join('\n'));
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to export report' });
+    handleError(res, error, 'Failed to export report');
   }
 };

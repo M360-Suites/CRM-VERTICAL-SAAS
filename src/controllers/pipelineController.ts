@@ -9,6 +9,7 @@ import { ApiResponse, AuthRequest } from '../types';
 import { requireOrganization } from '../utils/tenant';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
+import { handleError } from '../utils/errorHandler';
 
 const isValidObjectId = (value: unknown): value is string =>
   typeof value === 'string' && mongoose.Types.ObjectId.isValid(value);
@@ -189,7 +190,7 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to fetch pipeline' });
+    handleError(res, error, 'Failed to fetch pipeline');
   }
 };
 
@@ -206,7 +207,7 @@ export const getPipelineStages = async (req: AuthRequest, res: Response): Promis
 
     res.json(stages.map(formatStage));
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch pipeline stages' });
+    handleError(res, error, 'Failed to fetch pipeline stages');
   }
 };
 
@@ -235,7 +236,7 @@ export const getPipelineDeals = async (req: AuthRequest, res: Response): Promise
       data: deals.map(formatDeal)
     });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch pipeline deals' });
+    handleError(res, error, 'Failed to fetch pipeline deals');
   }
 };
 
@@ -312,7 +313,7 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
     const populatedDeal = await Deal.findById(deal._id).populate('company_id', 'name').lean();
     res.status(201).json({ status: true, message: 'Pipeline deal created successfully', data: populatedDeal ? formatDeal(populatedDeal) : deal });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to create pipeline deal' });
+    handleError(res, error, 'Failed to create pipeline deal');
   }
 };
 
@@ -430,7 +431,7 @@ export const updatePipelineDeal = async (req: AuthRequest, res: Response): Promi
       data: deal ? formatDeal(deal) : null
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to update pipeline deal' });
+    handleError(res, error, 'Failed to update pipeline deal');
   }
 };
 
@@ -525,7 +526,7 @@ export const movePipelineDealStage = async (req: AuthRequest, res: Response): Pr
 
     res.json(deal ? formatDeal(deal) : null);
   } catch (error) {
-    res.status(500).json({ message: 'Failed to move pipeline deal' });
+    handleError(res, error, 'Failed to move pipeline deal');
   }
 };
 
@@ -548,7 +549,7 @@ export const deletePipelineDeal = async (req: AuthRequest, res: Response): Promi
 
     res.json({ status: true, message: 'Deal deleted successfully' });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to delete pipeline deal' });
+    handleError(res, error, 'Failed to delete pipeline deal');
   }
 };
 
@@ -568,7 +569,7 @@ export const getPipelineTeamMembers = async (req: AuthRequest, res: Response): P
       email: user.email
     })));
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch team members' });
+    handleError(res, error, 'Failed to fetch team members');
   }
 };
 
@@ -590,7 +591,7 @@ export const getPipelineStageAssignees = async (req: AuthRequest, res: Response)
       }))
     ));
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch stage assignees' });
+    handleError(res, error, 'Failed to fetch stage assignees');
   }
 };
 
@@ -652,7 +653,7 @@ export const assignPipelineStageMember = async (req: AuthRequest, res: Response)
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to assign team member' });
+    handleError(res, error, 'Failed to assign team member');
   }
 };
 
@@ -699,7 +700,7 @@ export const removePipelineStageMember = async (req: AuthRequest, res: Response)
       }
     });
   } catch (error) {
-    res.status(500).json({ status: false, message: 'Failed to remove stage assignee' });
+    handleError(res, error, 'Failed to remove stage assignee');
   }
 };
 
@@ -726,7 +727,7 @@ export const getPipelineDealActivities = async (req: AuthRequest, res: Response)
       created_at: activity.created_at
     })));
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch deal activities' });
+    handleError(res, error, 'Failed to fetch deal activities');
   }
 };
 
@@ -772,7 +773,7 @@ export const createPipelineStage = async (req: AuthRequest, res: Response): Prom
 
     res.status(201).json(formatStage(stage));
   } catch (error) {
-    res.status(500).json({ message: 'Failed to create pipeline stage' });
+    handleError(res, error, 'Failed to create pipeline stage');
   }
 };
 
@@ -816,7 +817,7 @@ export const updatePipelineStage = async (req: AuthRequest, res: Response): Prom
 
     res.json(formatStage(stage));
   } catch (error) {
-    res.status(500).json({ message: 'Failed to update pipeline stage' });
+    handleError(res, error, 'Failed to update pipeline stage');
   }
 };
 
@@ -845,6 +846,6 @@ export const deletePipelineStage = async (req: AuthRequest, res: Response): Prom
 
     res.json({ message: 'Stage deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to delete pipeline stage' });
+    handleError(res, error, 'Failed to delete pipeline stage');
   }
 };

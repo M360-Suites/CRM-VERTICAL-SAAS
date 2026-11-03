@@ -4,6 +4,7 @@ import { Task, ITask, TaskType, TaskPriority, TaskStatus } from '../models/Task'
 import { Activity } from '../models/Activity';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
+import { handleError } from '../utils/errorHandler';
 
 interface TaskQuery {
   page?: number;
@@ -88,10 +89,7 @@ export const listTasks = async (req: AuthRequest, res: Response): Promise<void> 
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch tasks'
-    });
+    handleError(res, error, 'Failed to fetch tasks');
   }
 };
 
@@ -128,10 +126,7 @@ export const getTaskById = async (req: AuthRequest, res: Response): Promise<void
 
     res.json({ status: true, message: 'Task retrieved successfully', data: task });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch task'
-    });
+    handleError(res, error, 'Failed to fetch task');
   }
 };
 
@@ -211,10 +206,7 @@ export const createTask = async (req: AuthRequest, res: Response): Promise<void>
 
     res.status(201).json({ status: true, message: 'Task created successfully', data: populatedTask });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to create task'
-    });
+    handleError(res, error, 'Failed to create task');
   }
 };
 
@@ -323,10 +315,7 @@ export const updateTask = async (req: AuthRequest, res: Response): Promise<void>
 
     res.json({ status: true, message: 'Task updated successfully', data: task });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to update task'
-    });
+    handleError(res, error, 'Failed to update task');
   }
 };
 
@@ -357,10 +346,7 @@ export const deleteTask = async (req: AuthRequest, res: Response): Promise<void>
 
     res.json({ status: true, message: 'Task deleted successfully' });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to delete task'
-    });
+    handleError(res, error, 'Failed to delete task');
   }
 };
 
@@ -407,10 +393,7 @@ export const getMyTasks = async (req: AuthRequest, res: Response): Promise<void>
 
     res.json({ status: true, message: 'My tasks retrieved successfully', data: tasks });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch tasks'
-    });
+    handleError(res, error, 'Failed to fetch tasks');
   }
 };
 
@@ -447,10 +430,7 @@ export const completeTask = async (req: AuthRequest, res: Response): Promise<voi
 
     res.json({ status: true, message: 'Task completed successfully', data: task });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to complete task'
-    });
+    handleError(res, error, 'Failed to complete task');
   }
 };
 
@@ -481,9 +461,6 @@ export const getUpcomingTasks = async (req: AuthRequest, res: Response): Promise
 
     res.json({ status: true, message: 'Upcoming tasks retrieved successfully', data: tasks });
   } catch (error) {
-    res.status(500).json({
-      status: false,
-      message: 'Failed to fetch upcoming tasks'
-    });
+    handleError(res, error, 'Failed to fetch upcoming tasks');
   }
 };

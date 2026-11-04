@@ -1,4 +1,6 @@
 import ensend from '../config/ensend';
+import { getFrontendUrl } from './frontend';
+import { renderSystemEmail, type SystemEmailName } from './systemEmailTemplates';
 
 export interface EmailData {
   subject: string;
@@ -49,18 +51,76 @@ const roleLabels: Record<string, string> = {
 const formatRoleLabel = (role: string): string =>
   roleLabels[role] ?? role.replace(/_/g, ' ');
 
-export const sendOTPEmail = async (to: string, otp: string): Promise<void> => {
+/** Minutes an emailed verification / reset code stays valid (matches the OTP models' expiry) */
+const OTP_EXPIRY_MINUTES = 10;
+
+/** First name for greetings, falling back to the email's local part */
+const greetingName = (fullName: string | undefined, email: string): string =>
+  fullName?.trim() || email.split('@')[0];
+
+const sendSystemEmail = async (
+  name: SystemEmailName,
+  recipients: Array<{ address: string; name?: string }>,
+  data: Record<string, unknown>
+): Promise<void> => {
+  const rendered = renderSystemEmail(name, data);
   await sendMail({
-    subject: 'Your Password Reset OTP',
-    message: `
-      <h2>Password Reset Request</h2>
-      <p>Your OTP code is:</p>
-      <h1 style="letter-spacing: 8px; font-family: monospace;">${otp}</h1>
-      <p>This code expires in 10 minutes.</p>
-      <p>If you did not request this, please ignore this email.</p>
-    `,
+    subject: rendered.subject,
+    message: rendered.html,
     mailType: 'html',
-    recipients: [{ address: to, name: '' }]
+    recipients: recipients.map((recipient) => ({ address: recipient.address, name: recipient.name ?? '' }))
+  });
+};
+
+/** 02-reset-password — forgot-password code */
+export const sendOTPEmail = async (to: string, otp: string, fullName?: string): Promise<void> => {
+  await sendSystemEmail('reset-password', [{ address: to, name: fullName }], {
+    full_name: greetingName(fullName, to),
+    otp
+  });
+};
+
+/** 03-staff-otp — staff login/session verification code */
+export const sendStaffOtpEmail = async (
+  to: string,
+  otp: string,
+  fullName?: string,
+  expiresInMinutes = OTP_EXPIRY_MINUTES
+): Promise<void> => {
+  await sendSystemEmail('staff-otp', [{ address: to, name: fullName }], {
+    full_name: greetingName(fullName, to),
+    otp,
+    expires_in_minutes: expiresInMinutes
+  });
+};
+
+/** 04-welcome — account is fully active */
+export const sendWelcomeEmail = async (to: string, fullName?: string): Promise<void> => {
+  await sendSystemEmail('welcome', [{ address: to, name: fullName }], {
+    full_name: greetingName(fullName, to)
+  });
+};
+
+export interface NotificationDigestUpdate {
+  /** Trusted HTML for the update line — escape any user-supplied parts before building it */
+  html: string;
+  /** Plain-text version of the same line */
+  text: string;
+  /** true = amber "action required" style */
+  is_warning?: boolean;
+}
+
+/** 05-notification — digest of priority updates */
+export const sendNotificationDigestEmail = async (
+  to: string,
+  input: { fullName?: string; updates: NotificationDigestUpdate[]; notificationsUrl?: string }
+): Promise<void> => {
+  if (input.updates.length === 0) return;
+  await sendSystemEmail('notification', [{ address: to, name: input.fullName }], {
+    full_name: greetingName(input.fullName, to),
+    update_count: input.updates.length,
+    updates: input.updates.map((update) => ({ ...update, is_warning: Boolean(update.is_warning) })),
+    notifications_url: input.notificationsUrl ?? `${getFrontendUrl()}/notifications`
   });
 };
 
@@ -103,18 +163,12 @@ export const sendTaskReminderEmail = async (
   });
 };
 
-export const sendEmailVerificationOTP = async (to: string, otp: string): Promise<void> => {
-  await sendMail({
-    subject: 'Verify your CRM360 email',
-    message: `
-      <h2>Verify Your Email</h2>
-      <p>Use this code to finish creating your CRM360 account:</p>
-      <h1 style="letter-spacing: 8px; font-family: monospace;">${otp}</h1>
-      <p>This code expires in 10 minutes.</p>
-      <p>If you did not create an account, please ignore this email.</p>
-    `,
-    mailType: 'html',
-    recipients: [{ address: to, name: '' }]
+/** 01-verify-email — sign-up email verification code */
+export const sendEmailVerificationOTP = async (to: string, otp: string, fullName?: string): Promise<void> => {
+  await sendSystemEmail('verify-email', [{ address: to, name: fullName }], {
+    full_name: greetingName(fullName, to),
+    otp,
+    expires_in_minutes: OTP_EXPIRY_MINUTES
   });
 };
 
@@ -174,41 +228,56 @@ export const sendStageCommentEmail = async (
   });
 };
 
+export const intentLabel = (score: number): string =>
+  score >= 70 ? 'High Priority' : score >= 40 ? 'Medium Priority' : 'Low Priority';
+
+const formatLeadValue = (value: number | undefined, currency: string | undefined): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 'Not provided';
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(value);
+  } catch {
+    return `${value.toLocaleString('en-US')} ${currency ?? ''}`.trim();
+  }
+};
+
+/**
+ * 06-new-lead — one email per recipient so each is greeted by name.
+ * Best effort per recipient: one failed address doesn't stop the rest.
+ */
 export const sendNewLeadEmail = async (
   recipients: Array<{ address: string; name: string }>,
   input: {
     leadName: string;
-    contactName?: string;
-    email?: string;
-    phone?: string;
-    source?: string;
+    /** Job title, or company when no title is known */
+    title?: string;
     company?: string;
+    source?: string;
+    value?: number;
+    currency?: string;
+    intentScore?: number;
+    leadUrl?: string;
   }
 ): Promise<void> => {
-  const leadLine = [input.leadName, input.company]
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join(' - ');
+  const score = Math.max(0, Math.min(100, Math.round(input.intentScore ?? 50)));
+  const data = {
+    lead_name: input.leadName,
+    lead_title: input.title?.trim() || input.company?.trim() || 'Not provided',
+    lead_est_arr: formatLeadValue(input.value, input.currency),
+    lead_source: input.source?.trim() || 'Web capture',
+    lead_intent_score: score,
+    lead_intent_label: intentLabel(score),
+    lead_url: input.leadUrl ?? `${getFrontendUrl()}/revenue-engine`
+  };
 
-  const detailRows = [
-    input.email ? `<p><strong>Email:</strong> ${escapeHtml(input.email)}</p>` : '',
-    input.phone ? `<p><strong>Phone:</strong> ${escapeHtml(input.phone)}</p>` : '',
-    input.source ? `<p><strong>Source:</strong> ${escapeHtml(input.source)}</p>` : ''
-  ].join('');
-
-  await sendMail({
-    subject: `New lead captured: ${leadLine || input.leadName}`,
-    message: `
-      <h2>New lead landed in your CRM</h2>
-      <p>A new lead has been captured.</p>
-      ${leadLine ? `<p><strong>${escapeHtml(leadLine)}</strong></p>` : ''}
-      ${detailRows}
-      <p>Please review this lead and assign it to a sales rep.</p>
-      <p style="color: #64748b; font-size: 13px;">You are receiving this because you are an organization admin.</p>
-    `,
-    mailType: 'html',
-    recipients
-  });
+  const results = await Promise.allSettled(
+    recipients.map((recipient) =>
+      sendSystemEmail('new-lead', [recipient], { ...data, full_name: greetingName(recipient.name, recipient.address) })
+    )
+  );
+  const failed = results.filter((result) => result.status === 'rejected');
+  if (failed.length === results.length && failed.length > 0) {
+    throw (failed[0] as PromiseRejectedResult).reason;
+  }
 };
 
 export { sendMail };

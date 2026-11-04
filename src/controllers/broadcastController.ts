@@ -1,5 +1,5 @@
 /**
- * Broadcasts — bulk email to contacts through Sender.net, with send history
+ * Broadcasts — bulk email to contacts through Ensend (batches of 250), with send history
  */
 import mongoose from 'mongoose';
 import { Response } from 'express';
@@ -11,8 +11,8 @@ import { Contact, type Temperature } from '../models/Contact';
 import { Organization } from '../models/Organization';
 import { requireOrganization } from '../utils/tenant';
 import { optionalEnum, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
-import { renderEmail, sampleMergeValues } from '../utils/emailTemplateRender';
-import { isSenderConfigured, sendEmail } from '../utils/senderMailer';
+import { buildMergeValues, prepareTemplateHtml, sampleMergeValues } from '../utils/emailTemplateRender';
+import { isEmailConfigured, sendBroadcastBatch, toEnsendTemplate } from '../utils/ensendMailer';
 import { buildAudienceFilter, cancelBroadcast, startBroadcast } from '../services/broadcastService';
 import { logger } from '../config/logger';
 import { handleError } from '../utils/errorHandler';
@@ -376,8 +376,8 @@ export const sendBroadcast = async (req: AuthRequest, res: Response): Promise<vo
     const id = parseId(req, res);
     if (!id) return;
 
-    if (!isSenderConfigured()) {
-      res.status(503).json({ status: false, message: 'Email sending is not configured' });
+    if (!isEmailConfigured()) {
+      res.status(503).json({ status: false, message: 'Email sending is not configured. Set ENSEND_SECRET (and ENSEND_MAIL to a verified Ensend sender identity).' });
       return;
     }
 
@@ -466,8 +466,8 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
     const id = parseId(req, res);
     if (!id) return;
 
-    if (!isSenderConfigured()) {
-      res.status(503).json({ status: false, message: 'Email sending is not configured' });
+    if (!isEmailConfigured()) {
+      res.status(503).json({ status: false, message: 'Email sending is not configured. Set ENSEND_SECRET (and ENSEND_MAIL to a verified Ensend sender identity).' });
       return;
     }
 
@@ -480,15 +480,21 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const rendered = renderEmail(broadcast, { organization }, sampleMergeValues());
-    await sendEmail({
-      to: req.user.email,
-      subject: `[Test] ${rendered.subject}`,
-      html: rendered.html,
-      fromName: organization?.name
+    // Same path as a real send (Ensend broadcast + per-recipient variables), so the
+    // test shows exactly how Ensend fills in the merge tags
+    const template = toEnsendTemplate(
+      `[Test] ${broadcast.subject}`,
+      prepareTemplateHtml(broadcast, { withUnsubscribe: true })
+    );
+    const values = { ...sampleMergeValues(), ...buildMergeValues({ organization }) };
+    const ref = await sendBroadcastBatch({
+      subject: template.subject,
+      html: template.html,
+      fromName: organization?.name,
+      recipients: [{ address: req.user.email, name: req.user.display_name, variables: template.variablesFor(values) }]
     });
 
-    res.json({ status: true, message: `Test email sent to ${req.user.email}` });
+    res.json({ status: true, message: `Test email sent to ${req.user.email}`, data: { ensend_ref: ref } });
   } catch (error) {
     handleError(res, error, 'Failed to send test email');
   }

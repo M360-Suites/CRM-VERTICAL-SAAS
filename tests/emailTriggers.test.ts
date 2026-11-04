@@ -16,9 +16,9 @@ jest.mock('../src/models/TriggerRun', () => ({ TriggerRun: runModel }));
 jest.mock('../src/models/Deal', () => ({ Deal: dealModel }));
 jest.mock('../src/models/EmailTemplate', () => ({ EmailTemplate: templateModel }));
 jest.mock('../src/models/Organization', () => ({ Organization: organizationModel }));
-jest.mock('../src/utils/senderMailer', () => {
-  class SenderRateLimitError extends Error {}
-  return { SenderRateLimitError, sendEmail: (...args: unknown[]) => sendEmail(...args) };
+jest.mock('../src/utils/ensendMailer', () => {
+  class EmailRateLimitError extends Error {}
+  return { EmailRateLimitError, sendEmail: (...args: unknown[]) => sendEmail(...args) };
 });
 jest.mock('../src/config', () => ({ __esModule: true, default: { JWT_SECRET: 'test', BACKEND_URL: 'https://api.test' } }));
 jest.mock('../src/config/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() } }));
@@ -129,7 +129,8 @@ describe('processTriggerRun', () => {
     const email = sendEmail.mock.calls[0][0];
     expect(email).toMatchObject({ to: 'ada@example.com', subject: 'Hi Ada', fromName: 'Acme', replyTo: 'grace@co.test' });
     expect(email.html).toContain('<p>Proposal</p>');
-    expect(email.unsubscribeUrl).toMatch(/^https:\/\/api\.test\/api\/v1\/public\/email\/unsubscribe/);
+    // Ensend has no custom headers, so the opt-out link lives in the body footer
+    expect(email.html).toMatch(/href="https:\/\/api\.test\/api\/v1\/public\/email\/unsubscribe/);
     expect(runModel.updateOne).toHaveBeenCalledWith(
       { _id: run._id },
       { $set: expect.objectContaining({ status: 'sent', message_id: 'snd-123' }) }
@@ -161,9 +162,9 @@ describe('processTriggerRun', () => {
   });
 
   it('puts the run back in the queue when Sender.net rate limits', async () => {
-    const { SenderRateLimitError } = jest.requireMock('../src/utils/senderMailer');
+    const { EmailRateLimitError } = jest.requireMock('../src/utils/ensendMailer');
     dealModel.findOne.mockReturnValue(populatedDeal());
-    sendEmail.mockRejectedValueOnce(new SenderRateLimitError());
+    sendEmail.mockRejectedValueOnce(new EmailRateLimitError());
     runModel.updateOne.mockResolvedValueOnce({});
 
     await expect(processTriggerRun(run)).resolves.toEqual({ status: 'deferred' });

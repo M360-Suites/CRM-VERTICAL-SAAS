@@ -1,0 +1,12 @@
+Hi {{full_name}},
+
+You have {{update_count}} new priority updates waiting for your attention in CRM360. Take a moment to review recent activities and keep your deals moving forward.
+
+{{#each updates}}
+- {{#if is_warning}}[Action required] {{/if}}{{text}}
+{{/each}}
+
+Open Notification Center: {{notifications_url}}
+
+Best regards,
+The CRM360 Team

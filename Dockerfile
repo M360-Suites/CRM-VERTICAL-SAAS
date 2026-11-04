@@ -20,6 +20,8 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist
+# System email templates and the images served at /email-assets
+COPY --from=builder /app/emails ./emails
 
 EXPOSE 3000
 

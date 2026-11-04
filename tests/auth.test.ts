@@ -69,7 +69,8 @@ jest.mock('../src/utils/jwt', () => ({
 
 jest.mock('../src/utils/email', () => ({
   sendEmailVerificationOTP: mockSendEmailVerificationOTP,
-  sendOTPEmail: mockSendOTPEmail
+  sendOTPEmail: mockSendOTPEmail,
+  sendWelcomeEmail: jest.fn().mockResolvedValue(undefined)
 }));
 
 jest.mock('../src/seeds/pipelineSeed', () => ({

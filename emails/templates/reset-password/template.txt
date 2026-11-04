@@ -1,0 +1,12 @@
+Hi {{full_name}},
+
+We received a request to reset your CRM360 account password.
+Enter the one-time passcode below to create a new password and regain access to your pipeline.
+
+Passcode: {{otp}}
+
+If you didn't request a password reset, you can safely ignore this email. Your account will remain secure.
+
+Best regards,
+The CRM360 Team
+Contact Support: {{support_url}}

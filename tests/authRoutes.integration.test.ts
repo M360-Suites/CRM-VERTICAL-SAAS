@@ -32,7 +32,7 @@ jest.mock('../src/models/EmailVerificationOtp', () => ({
   EmailVerificationOtp: { countDocuments, updateMany, create: createOtp, findOne: findEmailOtp }
 }));
 jest.mock('../src/models/PasswordResetOtp', () => ({ PasswordResetOtp: { countDocuments, updateMany, create: createOtp, findOne: findPasswordOtp } }));
-jest.mock('../src/utils/email', () => ({ sendEmailVerificationOTP: sendVerification, sendOTPEmail: sendPasswordOtp }));
+jest.mock('../src/utils/email', () => ({ sendEmailVerificationOTP: sendVerification, sendOTPEmail: sendPasswordOtp, sendWelcomeEmail: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../src/seeds/pipelineSeed', () => ({ seedDefaultPipelineForOrganization: seedPipeline }));
 jest.mock('../src/utils/organization', () => ({ makeOrganizationSlug: (name: string) => name.toLowerCase(), ensureUserOrganization }));
 jest.mock('../src/utils/tenant', () => ({ requireOrganization }));
@@ -93,7 +93,7 @@ describe('auth HTTP API', () => {
     expect(response.body).toMatchObject({ status: true, message: expect.stringContaining('User registered successfully') });
     expect(findOne).toHaveBeenCalledWith({ email: 'ada@example.com' });
     expect(seedPipeline).toHaveBeenCalledWith('org-1');
-    expect(sendVerification).toHaveBeenCalledWith('ada@example.com', expect.stringMatching(/^\d{5}$/));
+    expect(sendVerification.mock.calls[0].slice(0, 2)).toEqual(['ada@example.com', expect.stringMatching(/^\d{5}$/)]);
     expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('crm_IV=false')]));
   });
 
@@ -136,7 +136,7 @@ describe('auth HTTP API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ status: true, message: 'Verification code sent to your email' });
-    expect(sendVerification).toHaveBeenCalledWith('ada@example.com', expect.stringMatching(/^\d{5}$/));
+    expect(sendVerification.mock.calls[0].slice(0, 2)).toEqual(['ada@example.com', expect.stringMatching(/^\d{5}$/)]);
   });
 
   it('gets the current user profile through the real HTTP route', async () => {
@@ -185,7 +185,7 @@ describe('auth HTTP API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ status: true, message: 'OTP sent to your email' });
-    expect(sendPasswordOtp).toHaveBeenCalledWith('ada@example.com', expect.stringMatching(/^\d{5}$/));
+    expect(sendPasswordOtp.mock.calls[0].slice(0, 2)).toEqual(['ada@example.com', expect.stringMatching(/^\d{5}$/)]);
   });
 
   it('rejects an invalid password reset OTP through the real HTTP route', async () => {

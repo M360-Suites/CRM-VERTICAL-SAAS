@@ -14,6 +14,8 @@ export interface IBroadcastRecipient extends Document {
   name?: string;
   status: BroadcastRecipientStatus;
   message_id?: string;
+  /** Set when a dispatcher claims this recipient into an Ensend batch */
+  claim_id?: string;
   error?: string;
   sent_at?: Date;
   created_at: Date;
@@ -33,6 +35,7 @@ const BroadcastRecipientSchema = new Schema<IBroadcastRecipient>(
       default: 'queued'
     },
     message_id: { type: String },
+    claim_id: { type: String },
     error: { type: String },
     sent_at: { type: Date }
   },
@@ -44,5 +47,6 @@ const BroadcastRecipientSchema = new Schema<IBroadcastRecipient>(
 BroadcastRecipientSchema.index({ broadcast_id: 1, email: 1 }, { unique: true });
 BroadcastRecipientSchema.index({ broadcast_id: 1, status: 1 });
 BroadcastRecipientSchema.index({ message_id: 1 }, { sparse: true });
+BroadcastRecipientSchema.index({ claim_id: 1 }, { sparse: true });
 
 export const BroadcastRecipient = mongoose.model<IBroadcastRecipient>('BroadcastRecipient', BroadcastRecipientSchema);

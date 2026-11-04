@@ -1,0 +1,11 @@
+Hi {{full_name}},
+
+Welcome to CRM360! Your account has been successfully created.
+You can now log in to access your sales pipeline, manage customer relationships, track team performance, automate outreach cadences, and close deals faster - all in one place.
+If you need any assistance, feel free to contact your CRM success team.
+
+We're excited to have you on board!
+
+Best regards,
+The CRM360 Team
+Contact Support: {{support_url}}

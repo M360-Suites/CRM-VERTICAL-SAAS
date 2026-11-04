@@ -1,6 +1,8 @@
 /**
  * Broadcast model
- * A bulk email sent through Sender.net to an audience of contacts.
+ * A bulk email sent through Ensend to an audience of contacts.
+ * Delivered in batches of up to 250; the first batch creates an Ensend
+ * broadcast whose ref (ensend_ref) every later batch is added to.
  * Recipients are snapshotted into BroadcastRecipient when the send starts,
  * so the history reflects exactly who it went to.
  */
@@ -41,6 +43,7 @@ export interface IBroadcast extends Document {
   completed_at?: Date;
   stats: IBroadcastStats;
   error?: string;
+  ensend_ref?: string;
   created_by?: mongoose.Types.ObjectId;
   sent_by?: mongoose.Types.ObjectId;
   created_at: Date;
@@ -86,6 +89,7 @@ const BroadcastSchema = new Schema<IBroadcast>(
       skipped: { type: Number, default: 0 }
     },
     error: { type: String },
+    ensend_ref: { type: String },
     created_by: { type: Schema.Types.ObjectId, ref: 'User' },
     sent_by: { type: Schema.Types.ObjectId, ref: 'User' }
   },

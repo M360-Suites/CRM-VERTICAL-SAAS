@@ -1,9 +1,12 @@
 /**
- * Broadcasts — bulk email to contacts through Sender.net.
+ * Broadcasts — bulk email to contacts through Ensend.
  *  - buildAudienceFilter: turns a broadcast audience into a Contact query
  *  - startBroadcast: snapshots the audience into BroadcastRecipient rows
- *  - sendNextBroadcastRecipient: called by the dispatcher, one email at a time
+ *  - sendNextBroadcastBatch: called by the dispatcher; claims up to 250 queued
+ *    recipients and sends them as one Ensend broadcast batch, personalised via
+ *    per-recipient variables
  */
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { Broadcast, type IBroadcast, type IBroadcastAudience } from '../models/Broadcast';
 import { BroadcastRecipient, type IBroadcastRecipient } from '../models/BroadcastRecipient';
@@ -11,8 +14,16 @@ import { Contact } from '../models/Contact';
 import { Organization } from '../models/Organization';
 import { User } from '../models/User';
 import { logger } from '../config/logger';
-import { SenderRateLimitError, sendEmail } from '../utils/senderMailer';
-import { buildUnsubscribeUrl, renderEmail } from '../utils/emailTemplateRender';
+import config from '../config';
+import {
+  ENSEND_BROADCAST_BATCH_SIZE,
+  EmailRateLimitError,
+  EnsendApiError,
+  sendBroadcastBatch,
+  toEnsendTemplate,
+  type EnsendTemplate
+} from '../utils/ensendMailer';
+import { buildMergeValues, buildUnsubscribeUrl, prepareTemplateHtml } from '../utils/emailTemplateRender';
 
 const INSERT_CHUNK = 500;
 
@@ -135,17 +146,33 @@ export const startDueScheduledBroadcasts = async (): Promise<void> => {
   }
 };
 
-const claimNextRecipient = async (): Promise<IBroadcastRecipient | null> => {
+/**
+ * Claim up to one Ensend batch of queued recipients from the oldest sending
+ * broadcast. Claimed rows get a unique claim_id so concurrent dispatchers never
+ * pick up the same recipients. Broadcasts with nothing left are closed out.
+ */
+const claimNextBatch = async (): Promise<{ broadcastId: mongoose.Types.ObjectId; recipients: IBroadcastRecipient[] } | null> => {
   const sending = await Broadcast.find({ status: 'sending' }).select('_id').sort({ started_at: 1 }).lean();
-  for (const { _id } of sending) {
-    const recipient = await BroadcastRecipient.findOneAndUpdate(
-      { broadcast_id: _id, status: 'queued' },
-      { $set: { status: 'sending' } },
-      { new: true }
-    );
-    if (recipient) return recipient;
 
-    // Nothing left to claim — close it out once in-flight sends finish
+  for (const { _id } of sending) {
+    const candidates = await BroadcastRecipient.find({ broadcast_id: _id, status: 'queued' })
+      .select('_id')
+      .sort({ _id: 1 })
+      .limit(ENSEND_BROADCAST_BATCH_SIZE)
+      .lean();
+
+    if (candidates.length > 0) {
+      const claimId = crypto.randomUUID();
+      await BroadcastRecipient.updateMany(
+        { _id: { $in: candidates.map((candidate) => candidate._id) }, status: 'queued' },
+        { $set: { status: 'sending', claim_id: claimId } }
+      );
+      const recipients = await BroadcastRecipient.find({ claim_id: claimId, status: 'sending' });
+      if (recipients.length > 0) return { broadcastId: _id, recipients };
+      continue;
+    }
+
+    // Nothing left to claim — close it out once in-flight batches finish
     const inFlight = await BroadcastRecipient.exists({ broadcast_id: _id, status: 'sending' });
     if (!inFlight) {
       await Broadcast.updateOne({ _id, status: 'sending' }, { $set: { status: 'sent', completed_at: new Date() } });
@@ -155,7 +182,8 @@ const claimNextRecipient = async (): Promise<IBroadcastRecipient | null> => {
 };
 
 type BroadcastSendContext = {
-  broadcast: Pick<IBroadcast, '_id' | 'subject' | 'html' | 'preview_text'>;
+  broadcast: Pick<IBroadcast, '_id' | 'subject' | 'html' | 'preview_text' | 'ensend_ref'>;
+  template: EnsendTemplate;
   organizationName?: string;
   replyTo?: string;
 };
@@ -168,7 +196,7 @@ const loadSendContext = async (broadcastId: mongoose.Types.ObjectId): Promise<Br
   if (cached && cached.expires > Date.now()) return cached.value;
 
   const broadcast = await Broadcast.findById(broadcastId)
-    .select('_id subject html preview_text status organization_id sent_by')
+    .select('_id subject html preview_text status organization_id sent_by ensend_ref')
     .lean();
   let value: BroadcastSendContext | null = null;
 
@@ -177,7 +205,14 @@ const loadSendContext = async (broadcastId: mongoose.Types.ObjectId): Promise<Br
       Organization.findById(broadcast.organization_id).select('name').lean(),
       broadcast.sent_by ? User.findById(broadcast.sent_by).select('email').lean() : Promise.resolve(null)
     ]);
-    value = { broadcast, organizationName: organization?.name, replyTo: sender?.email };
+    // Unsubscribe links need BACKEND_URL; without it the footer is left out (as before)
+    const html = prepareTemplateHtml(broadcast, { withUnsubscribe: Boolean(config.BACKEND_URL) });
+    value = {
+      broadcast,
+      template: toEnsendTemplate(broadcast.subject, html),
+      organizationName: organization?.name,
+      replyTo: sender?.email
+    };
   }
 
   // Short TTL so a cancel takes effect within a few seconds
@@ -185,67 +220,138 @@ const loadSendContext = async (broadcastId: mongoose.Types.ObjectId): Promise<Br
   return value;
 };
 
-/**
- * Send one queued broadcast email. Returns false when nothing was queued.
- */
-export const sendNextBroadcastRecipient = async (): Promise<boolean> => {
-  const recipient = await claimNextRecipient();
-  if (!recipient) return false;
+const settleRecipients = async (
+  broadcastId: mongoose.Types.ObjectId,
+  recipientIds: mongoose.Types.ObjectId[],
+  status: 'sent' | 'failed' | 'skipped',
+  extra: Record<string, unknown> = {}
+): Promise<void> => {
+  if (recipientIds.length === 0) return;
+  const { modifiedCount } = await BroadcastRecipient.updateMany(
+    { _id: { $in: recipientIds }, status: 'sending' },
+    { $set: { status, ...extra }, $unset: { claim_id: '' } }
+  );
+  if (modifiedCount) {
+    await Broadcast.updateOne({ _id: broadcastId }, { $inc: { [`stats.${status}`]: modifiedCount } });
+  }
+};
 
-  const settle = async (status: IBroadcastRecipient['status'], extra: Record<string, unknown> = {}) => {
-    await BroadcastRecipient.updateOne({ _id: recipient._id }, { $set: { status, ...extra } });
-    const counter = status === 'sent' ? 'stats.sent' : status === 'skipped' ? 'stats.skipped' : 'stats.failed';
-    await Broadcast.updateOne({ _id: recipient.broadcast_id }, { $inc: { [counter]: 1 } });
-  };
+/**
+ * Errors that will fail every batch the same way — stop the broadcast instead of
+ * burning through the list. Auth errors always; request errors only on the first
+ * batch (bad sender identity, bad content), since a later 400 may just be one bad address.
+ */
+const isFatalForBroadcast = (error: unknown, isFirstBatch: boolean): boolean =>
+  error instanceof EnsendApiError &&
+  ([401, 403].includes(error.statusCode) || (isFirstBatch && [400, 404, 422].includes(error.statusCode)));
+
+const failBroadcast = async (broadcastId: mongoose.Types.ObjectId, reason: string): Promise<void> => {
+  await Broadcast.updateOne(
+    { _id: broadcastId, status: 'sending' },
+    { $set: { status: 'failed', error: reason, completed_at: new Date() } }
+  );
+  const { modifiedCount } = await BroadcastRecipient.updateMany(
+    { broadcast_id: broadcastId, status: 'queued' },
+    { $set: { status: 'skipped', error: `Broadcast failed: ${reason}` } }
+  );
+  if (modifiedCount) await Broadcast.updateOne({ _id: broadcastId }, { $inc: { 'stats.skipped': modifiedCount } });
+  contextCache.delete(String(broadcastId));
+};
+
+/**
+ * Send the next batch of queued broadcast emails through Ensend.
+ * Returns how many recipients were processed (0 when nothing was queued).
+ */
+export const sendNextBroadcastBatch = async (): Promise<number> => {
+  const claimed = await claimNextBatch();
+  if (!claimed) return 0;
+
+  const { broadcastId, recipients } = claimed;
+  const allIds = recipients.map((recipient) => recipient._id as mongoose.Types.ObjectId);
+  let eligibleIds: mongoose.Types.ObjectId[] = [];
+  let isFirstBatch = false;
 
   try {
-    const context = await loadSendContext(recipient.broadcast_id);
+    const context = await loadSendContext(broadcastId);
     if (!context) {
       // Broadcast was cancelled mid-send
-      await settle('skipped', { error: 'Broadcast cancelled' });
-      return true;
+      await settleRecipients(broadcastId, allIds, 'skipped', { error: 'Broadcast cancelled' });
+      return recipients.length;
     }
 
-    const contact = await Contact.findOne({ _id: recipient.contact_id, organization_id: recipient.organization_id })
+    const contacts = await Contact.find({
+      _id: { $in: recipients.map((recipient) => recipient.contact_id) },
+      organization_id: recipients[0].organization_id
+    })
       .select('first_name last_name email phone role_title company_id email_opt_out')
       .populate('company_id', 'name')
       .lean();
-    if (!contact || contact.email_opt_out) {
-      await settle('skipped', { error: contact ? 'Contact has unsubscribed' : 'Contact was deleted' });
-      return true;
+    const contactsById = new Map(contacts.map((contact) => [String(contact._id), contact]));
+
+    const deletedIds: mongoose.Types.ObjectId[] = [];
+    const optedOutIds: mongoose.Types.ObjectId[] = [];
+    const batch: Array<{ address: string; name?: string; variables: Record<string, string> }> = [];
+
+    for (const recipient of recipients) {
+      const contact = contactsById.get(String(recipient.contact_id));
+      if (!contact) {
+        deletedIds.push(recipient._id as mongoose.Types.ObjectId);
+        continue;
+      }
+      if (contact.email_opt_out) {
+        optedOutIds.push(recipient._id as mongoose.Types.ObjectId);
+        continue;
+      }
+
+      const values = buildMergeValues({
+        contact,
+        company: contact.company_id as unknown as { name?: string } | null,
+        organization: { name: context.organizationName },
+        unsubscribe_url: buildUnsubscribeUrl(String(contact._id))
+      });
+      batch.push({ address: recipient.email, name: recipient.name, variables: context.template.variablesFor(values) });
+      eligibleIds.push(recipient._id as mongoose.Types.ObjectId);
     }
 
-    const unsubscribeUrl = buildUnsubscribeUrl(String(contact._id));
-    const rendered = renderEmail(context.broadcast, {
-      contact,
-      company: contact.company_id as unknown as { name?: string } | null,
-      organization: { name: context.organizationName },
-      unsubscribe_url: unsubscribeUrl
-    });
+    await settleRecipients(broadcastId, deletedIds, 'skipped', { error: 'Contact was deleted' });
+    await settleRecipients(broadcastId, optedOutIds, 'skipped', { error: 'Contact has unsubscribed' });
+    if (batch.length === 0) return recipients.length;
 
-    const messageId = await sendEmail({
-      to: recipient.email,
-      toName: recipient.name,
-      subject: rendered.subject,
-      html: rendered.html,
+    isFirstBatch = !context.broadcast.ensend_ref;
+    const ref = await sendBroadcastBatch({
+      broadcastRef: context.broadcast.ensend_ref,
+      subject: context.template.subject,
+      html: context.template.html,
       fromName: context.organizationName,
       replyTo: context.replyTo,
-      unsubscribeUrl
+      recipients: batch
     });
 
-    await settle('sent', { message_id: messageId, sent_at: new Date() });
-  } catch (error) {
-    if (error instanceof SenderRateLimitError) {
-      // Nothing went out — put it back so it's sent once the limit lifts
-      await BroadcastRecipient.updateOne({ _id: recipient._id }, { $set: { status: 'queued' } }).catch(() => undefined);
-      return true;
+    if (!context.broadcast.ensend_ref) {
+      await Broadcast.updateOne({ _id: broadcastId }, { $set: { ensend_ref: ref } });
+      context.broadcast.ensend_ref = ref;
     }
+
+    await settleRecipients(broadcastId, eligibleIds, 'sent', { message_id: ref, sent_at: new Date() });
+  } catch (error) {
+    const pending = eligibleIds.length ? eligibleIds : allIds;
+
+    if (error instanceof EmailRateLimitError) {
+      // Nothing went out — put the batch back so it's sent once the limit lifts
+      await BroadcastRecipient.updateMany(
+        { _id: { $in: pending }, status: 'sending' },
+        { $set: { status: 'queued' }, $unset: { claim_id: '' } }
+      ).catch(() => undefined);
+      return recipients.length;
+    }
+
     const message = error instanceof Error ? error.message : 'Unknown error';
-    logger.warn({ err: error, recipientId: String(recipient._id) }, 'Broadcast email failed');
-    await settle('failed', { error: message }).catch(() => undefined);
+    logger.warn({ err: error, broadcastId: String(broadcastId), recipients: pending.length }, 'Broadcast batch failed');
+    await settleRecipients(broadcastId, pending, 'failed', { error: message }).catch(() => undefined);
+    if (isFatalForBroadcast(error, isFirstBatch)) await failBroadcast(broadcastId, message).catch(() => undefined);
   }
 
-  return true;
+  return recipients.length;
 };
 
 /** Cancel a scheduled or in-progress broadcast; queued recipients are marked skipped */

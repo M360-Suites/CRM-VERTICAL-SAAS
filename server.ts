@@ -51,6 +51,7 @@ import { startEmailDispatchService } from './src/services/emailDispatchService';
 import { initializeSocket } from './src/services/socketService';
 import { rateLimit, securityHeaders } from './src/middleware/security';
 import { handleError } from './src/utils/errorHandler';
+import { getEmailAssetsDir } from './src/utils/systemEmailTemplates';
 import { MidlineAgent, midlineMiddleware, midlineErrorHandler } from 'midline-agent';
 
 const app = express();
@@ -83,6 +84,22 @@ type RequestParseError = Error & {
 };
 
 app.set('trust proxy', 1);
+
+/**
+ * Images for system emails (logo + hero illustrations). Mounted before the
+ * security headers and rate limiter: email clients load these cross-site and
+ * Gmail/Outlook image proxies fetch from a few shared IPs.
+ */
+app.use(
+  '/email-assets',
+  (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  },
+  express.static(getEmailAssetsDir(), { maxAge: '7d', index: false, fallthrough: false })
+);
+
 app.use(httpLogger);
 app.use(securityHeaders);
 app.use(rateLimit);

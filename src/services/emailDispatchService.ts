@@ -2,17 +2,18 @@
  * Email dispatcher — a Mongo-backed queue worker for broadcasts and triggers.
  * Every tick it starts due scheduled broadcasts, sends due trigger runs first
  * (they're time-sensitive), then works through broadcast recipients,
- * throttled to EMAIL_MAX_SEND_RATE emails/second. A Sender.net 429
- * ends the tick; the email goes back in the queue.
+ * sent to Ensend in batches of up to 250. Trigger emails are throttled
+ * to EMAIL_MAX_SEND_RATE/second (also the pause between broadcast batches).
+ * An Ensend 429 ends the tick; the unsent emails go back in the queue.
  */
 import config from '../config';
-import { isSenderConfigured, isSenderRateLimited } from '../utils/senderMailer';
+import { isEmailConfigured, isEmailRateLimited } from '../utils/ensendMailer';
 import { logger } from '../config/logger';
 import { TriggerRun } from '../models/TriggerRun';
 import { BroadcastRecipient } from '../models/BroadcastRecipient';
 import { Broadcast } from '../models/Broadcast';
 import { claimDueTriggerRun, processTriggerRun } from './triggerService';
-import { sendNextBroadcastRecipient, startDueScheduledBroadcasts } from './broadcastService';
+import { sendNextBroadcastBatch, startDueScheduledBroadcasts } from './broadcastService';
 
 /** A send stuck in `sending` this long was interrupted by a restart */
 const STALE_SEND_MS = 15 * 60 * 1000;
@@ -57,16 +58,16 @@ export const runEmailDispatch = async (): Promise<void> => {
     await failInterruptedSends();
     await startDueScheduledBroadcasts();
 
-    while (Date.now() < deadline && !isSenderRateLimited()) {
+    while (Date.now() < deadline && !isEmailRateLimited()) {
       const run = await claimDueTriggerRun();
       if (!run) break;
       await processTriggerRun(run);
       await pause(gapMs);
     }
 
-    while (Date.now() < deadline && !isSenderRateLimited()) {
-      const sent = await sendNextBroadcastRecipient();
-      if (!sent) break;
+    while (Date.now() < deadline && !isEmailRateLimited()) {
+      const processed = await sendNextBroadcastBatch();
+      if (!processed) break;
       await pause(gapMs);
     }
   } catch (error) {
@@ -79,8 +80,8 @@ export const runEmailDispatch = async (): Promise<void> => {
 export const startEmailDispatchService = (): void => {
   if (dispatchTimer) return;
 
-  if (!isSenderConfigured()) {
-    logger.warn('Sender.net not configured (SENDER_API_TOKEN / SENDER_FROM_EMAIL) — broadcasts and email triggers will queue but not send');
+  if (!isEmailConfigured()) {
+    logger.warn('Ensend not configured (ENSEND_SECRET) — broadcasts and email triggers will queue but not send');
     return;
   }
 
@@ -93,7 +94,7 @@ export const startEmailDispatchService = (): void => {
     void runEmailDispatch();
   }, config.EMAIL_DISPATCH_INTERVAL_SECONDS * 1000);
 
-  logger.info(`Email dispatcher started (every ${config.EMAIL_DISPATCH_INTERVAL_SECONDS}s, ${config.EMAIL_MAX_SEND_RATE}/s)`);
+  logger.info(`Email dispatcher started (every ${config.EMAIL_DISPATCH_INTERVAL_SECONDS}s, ${config.EMAIL_MAX_SEND_RATE}/s, via Ensend)`);
 };
 
 export const stopEmailDispatchService = (): void => {

@@ -10,7 +10,8 @@ import { Organization } from '../models/Organization';
 import { UserInvitation } from '../models/UserInvitation';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { requireOrganization } from '../utils/tenant';
-import { sendUserInvitationEmail } from '../utils/email';
+import { sendUserInvitationEmail, sendWelcomeEmail } from '../utils/email';
+import { logger } from '../config/logger';
 import { getFrontendUrl } from '../utils/frontend';
 import { handleError, AppError } from '../utils/errorHandler';
 import { Deal } from '../models/Deal';
@@ -449,6 +450,13 @@ export const acceptInvitation = async (req: AuthRequest, res: Response): Promise
 
     invitation.accepted_at = new Date();
     await invitation.save();
+
+    // Best effort — a welcome email must never fail the invite acceptance
+    void Promise.resolve()
+      .then(() => sendWelcomeEmail(user.email, user.display_name))
+      .catch((error) =>
+      logger.warn({ err: error, userId: String(user._id) }, 'Failed to send welcome email')
+    );
 
     res.status(201).json({
       status: true,

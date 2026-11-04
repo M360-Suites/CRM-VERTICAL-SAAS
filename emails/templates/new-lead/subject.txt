@@ -1,0 +1,1 @@
+New lead: {{lead_name}} ({{lead_intent_label}})

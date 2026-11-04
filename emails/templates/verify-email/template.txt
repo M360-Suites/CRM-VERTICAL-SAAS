@@ -1,0 +1,14 @@
+Hi {{full_name}},
+
+We received a request to verify your CRM360 account. Please use the one-time verification code below to confirm your identity and secure your workspace.
+
+Verification code: {{otp}}
+Expires in {{expires_in_minutes}} minutes.
+
+If you did not request this verification code, please ignore this email or contact support immediately.
+
+Stay on top of your deals!
+
+Best regards,
+The CRM360 Team
+Contact Support: {{support_url}}

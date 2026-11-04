@@ -3,7 +3,7 @@
  *  - queueDealTriggers: called when a deal is created or changes stage; matches the
  *    org's active triggers and queues a TriggerRun (send_at = now + delay).
  *  - processTriggerRun: called by the dispatcher once a run is due; re-checks the
- *    deal still qualifies, renders the template and sends it through Sender.net.
+ *    deal still qualifies, renders the template and sends it through Ensend.
  */
 import mongoose from 'mongoose';
 import { EmailTrigger, type IEmailTrigger, type TriggerEvent } from '../models/EmailTrigger';
@@ -13,7 +13,7 @@ import { Deal } from '../models/Deal';
 import { PipelineStage } from '../models/Pipeline';
 import { Organization } from '../models/Organization';
 import { logger } from '../config/logger';
-import { SenderRateLimitError, sendEmail } from '../utils/senderMailer';
+import { EmailRateLimitError, sendEmail } from '../utils/ensendMailer';
 import { buildUnsubscribeUrl, renderEmail } from '../utils/emailTemplateRender';
 
 type ObjectIdLike = mongoose.Types.ObjectId | string;
@@ -187,8 +187,7 @@ export const processTriggerRun = async (run: ITriggerRun): Promise<RunOutcome> =
       subject: rendered.subject,
       html: rendered.html,
       fromName: organization?.name,
-      replyTo: trigger.recipient === 'contact' ? deal.owner_id?.email : undefined,
-      unsubscribeUrl
+      replyTo: trigger.recipient === 'contact' ? deal.owner_id?.email : undefined
     });
 
     const sentAt = new Date();
@@ -203,7 +202,7 @@ export const processTriggerRun = async (run: ITriggerRun): Promise<RunOutcome> =
 
     return { status: 'sent' };
   } catch (error) {
-    if (error instanceof SenderRateLimitError) {
+    if (error instanceof EmailRateLimitError) {
       await TriggerRun.updateOne({ _id: run._id }, { $set: { status: 'scheduled' } }).catch(() => undefined);
       return { status: 'deferred' };
     }

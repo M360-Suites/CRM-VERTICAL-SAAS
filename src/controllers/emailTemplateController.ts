@@ -9,7 +9,7 @@ import { EmailTrigger } from '../models/EmailTrigger';
 import { requireOrganization } from '../utils/tenant';
 import { optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { MERGE_VARIABLES, renderEmail, renderMergeTags, sampleMergeValues } from '../utils/emailTemplateRender';
-import { isSenderConfigured, sendEmail } from '../utils/senderMailer';
+import { isEmailConfigured, sendEmail } from '../utils/ensendMailer';
 import { logger } from '../config/logger';
 import { handleError } from '../utils/errorHandler';
 
@@ -303,8 +303,8 @@ export const sendTestTemplate = async (req: AuthRequest, res: Response): Promise
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    if (!isSenderConfigured()) {
-      res.status(503).json({ status: false, message: 'Email sending is not configured' });
+    if (!isEmailConfigured()) {
+      res.status(503).json({ status: false, message: 'Email sending is not configured. Set ENSEND_SECRET (and ENSEND_MAIL to a verified Ensend sender identity).' });
       return;
     }
 

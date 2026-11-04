@@ -9,7 +9,8 @@ import { EmailVerificationOtp } from '../models/EmailVerificationOtp';
 import { generateToken } from '../utils/jwt';
 import { AuthRequest } from '../types';
 import config from '../config';
-import { sendEmailVerificationOTP, sendOTPEmail } from '../utils/email';
+import { sendEmailVerificationOTP, sendOTPEmail, sendWelcomeEmail } from '../utils/email';
+import { logger } from '../config/logger';
 import { seedDefaultPipelineForOrganization } from '../seeds/pipelineSeed';
 import { requireOrganization } from '../utils/tenant';
 import { ensureUserOrganization, makeOrganizationSlug } from '../utils/organization';
@@ -121,7 +122,7 @@ const createVerificationOtp = async (user: IUser): Promise<boolean> => {
     expires_at: new Date(Date.now() + 10 * 60 * 1000),
   });
 
-  await sendEmailVerificationOTP(user.email, otp);
+  await sendEmailVerificationOTP(user.email, otp, user.display_name);
   return true;
 };
 
@@ -302,6 +303,13 @@ export const verifyEmail = async (req: AuthRequest, res: Response): Promise<void
     });
 
     setAuthCookies(res, token, user);
+
+    // Best effort — a welcome email must never block sign-in
+    void Promise.resolve()
+      .then(() => sendWelcomeEmail(user.email, user.display_name))
+      .catch((error) =>
+      logger.warn({ err: error, userId: String(user._id) }, 'Failed to send welcome email')
+    );
 
     res.json({
       status: true,
@@ -690,7 +698,7 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
         expires_at: new Date(Date.now() + 10 * 60 * 1000),
       });
 
-      await sendOTPEmail(user.email, otp);
+      await sendOTPEmail(user.email, otp, user.display_name);
     }
 
     res.json({

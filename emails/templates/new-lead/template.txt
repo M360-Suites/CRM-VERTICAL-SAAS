@@ -1,0 +1,14 @@
+Hi {{full_name}},
+
+A high-intent new lead has just entered your sales pipeline! Quick follow-up dramatically increases conversion rates.
+
+Lead Name:    {{lead_name}}
+Title:        {{lead_title}}
+Est. ARR:     {{lead_est_arr}}
+Source:       {{lead_source}}
+Intent Score: {{lead_intent_score}}/100 - {{lead_intent_label}}
+
+View Lead in CRM: {{lead_url}}
+
+Best regards,
+The CRM360 Team

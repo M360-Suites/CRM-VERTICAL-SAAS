@@ -98,7 +98,15 @@ const notifyAdminsOfNewLead = async (
     phone?: string;
     source?: string;
     company?: string;
+    role_title?: string;
     custom_fields?: Record<string, unknown>;
+    /** Deal value and currency, shown as "Est. ARR" */
+    value?: number;
+    currency?: string;
+    /** 0–100 from lead routing */
+    intentScore?: number;
+    /** Rep the lead was routed to — also emailed */
+    ownerId?: mongoose.Types.ObjectId | null;
   }
 ): Promise<void> => {
   try {
@@ -148,19 +156,25 @@ const notifyAdminsOfNewLead = async (
       });
     }
 
+    // Admins plus the rep the lead was routed to (if they aren't already an admin)
+    const emailRecipients = admins.map((admin) => ({ address: admin.email, name: admin.display_name || '' }));
+    if (lead.ownerId && !userIds.includes(lead.ownerId.toString())) {
+      const owner = await User.findOne({ _id: lead.ownerId, organization_id: organizationId, is_active: true })
+        .select('email display_name')
+        .lean();
+      if (owner?.email) emailRecipients.push({ address: owner.email, name: owner.display_name || '' });
+    }
+
     await sendNewLeadEmail(
-      admins
-        .map((admin) => ({
-          address: admin.email,
-          name: admin.display_name || ''
-        }))
-        .filter((recipient) => Boolean(recipient.address)),
+      emailRecipients.filter((recipient) => Boolean(recipient.address)),
       {
         leadName,
-        email: lead.email,
-        phone: lead.phone,
+        title: lead.role_title,
+        company: lead.company,
         source: lead.source,
-        company: lead.company
+        value: lead.value,
+        currency: lead.currency,
+        intentScore: lead.intentScore
       }
     );
   } catch (error) {
@@ -300,9 +314,10 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
     }
 
+    let routing: Awaited<ReturnType<typeof routeNewLead>> | null = null;
     try {
       await ensureRevopsDefaults(organization._id as mongoose.Types.ObjectId);
-      await routeNewLead(
+      routing = await routeNewLead(
         contact,
         {
           intent_score: pick('intent_score', 'intentScore'),
@@ -333,7 +348,12 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       phone: contact.phone,
       source: source || 'web-capture',
       company,
-      custom_fields: customFields
+      role_title: contact.role_title,
+      custom_fields: customFields,
+      value: deal?.value,
+      currency: deal?.currency,
+      intentScore: routing?.intent_score,
+      ownerId: routing?.owner_id ?? null
     });
 
     res.status(201).json({

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Verify your CRM360 account</title>
+<!--[if mso]><style>* { font-family: Arial, sans-serif !important; }</style><![endif]-->
+<style>
+  body { margin:0; padding:0; background:#FFFFFF; }
+  @media only screen and (max-width:520px) {
+    .container { width:100% !important; }
+    .px { padding-left:20px !important; padding-right:20px !important; }
+    .hero { max-width:100% !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#FFFFFF;">
+<!-- Preheader: inbox preview line, hidden in the body -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#FFFFFF;">Your CRM360 verification code is {{otp}}. It expires in {{expires_in_minutes}} minutes.&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FFFFFF;">
+  <tr>
+    <td align="center" style="padding:40px 16px;">
+      <table role="presentation" class="container" width="480" cellpadding="0" cellspacing="0" border="0" style="width:480px;max-width:480px;">
+
+        <!-- Logo -->
+        <tr>
+          <td align="center" style="padding:0 0 32px 0;">
+            <img src="{{assets_base_url}}/logo.png" width="120" alt="CRM360" style="display:block;width:120px;height:auto;border:0;outline:none;text-decoration:none;">
+          </td>
+        </tr>
+
+        <!-- Hero illustration -->
+        <tr>
+          <td align="center" style="padding:8px 0 32px 0;">
+            <img class="hero" src="{{assets_base_url}}/verify-email-hero.png" width="110" alt="" style="display:block;width:110px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;">
+          </td>
+        </tr>
+
+        <!-- Greeting -->
+        <tr>
+          <td class="px" align="center" style="padding:0 24px 20px 24px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:22px;font-weight:700;color:#1F2937;">Hi {{full_name}},</td>
+        </tr>
+
+        <tr>
+          <td class="px" align="center" style="padding:0 24px 24px 24px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#374151;">We received a request to verify your CRM360 account. Please use the one-time verification code below to confirm your identity and secure your workspace.</td>
+        </tr>
+        <!-- One-time code -->
+        <tr>
+          <td align="center" style="padding:0 0 8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="280" style="width:280px;">
+              <tr>
+                <td align="center" style="background:#F2F7FB;border:1px solid #D5E1EC;border-radius:12px;color:#0091FE;padding:16px 12px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:22px;line-height:24px;font-weight:700;letter-spacing:8px;">{{otp}}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:0 0 24px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:16px;color:#0091FE;">&#9719;&nbsp;Expires in {{expires_in_minutes}} minutes</td>
+        </tr>
+        <tr>
+          <td class="px" align="center" style="padding:0 24px 32px 24px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#6B7A8C;">If you did not request this verification code, please ignore this email or contact support immediately.</td>
+        </tr>
+
+        <!-- Blue sign-off card -->
+        <tr>
+          <td align="center" bgcolor="#0083EA" style="background-color:#0083EA;background-image:linear-gradient(135deg,#0072D6 0%,#0098FF 100%);border-radius:12px;padding:28px 24px 32px 24px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <p style="margin:0 0 16px 0;font-size:16px;line-height:22px;font-weight:700;color:#FFFFFF;">Stay on top of your deals!</p>
+            <p style="margin:0 0 12px 0;font-size:12px;line-height:16px;color:#BFE2FD;">Best regards,</p>
+            <p style="margin:0 0 20px 0;font-size:14px;line-height:20px;color:#FFFFFF;">The CRM360 Team</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+              <tr>
+                <td align="center" bgcolor="#0091FE" style="background:#0091FE;border-radius:999px;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+                  <a href="{{support_url}}" target="_blank" style="display:inline-block;padding:12px 32px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:999px;">Contact Support</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

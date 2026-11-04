@@ -108,6 +108,23 @@ export const renderEmail = (
   fallbackValues: Record<string, string> = {}
 ): { subject: string; html: string } => {
   const values = { ...fallbackValues, ...buildMergeValues(ctx) };
+  const html = prepareTemplateHtml(template, { withUnsubscribe: Boolean(ctx.unsubscribe_url) });
+
+  return {
+    subject: renderMergeTags(template.subject, values, { html: false }),
+    html: renderMergeTags(html, values, { html: true })
+  };
+};
+
+/**
+ * Add the hidden preheader and, when needed, an unsubscribe footer — without
+ * filling in merge tags. Bulk sends hand the result to Ensend, which fills
+ * the tags per recipient.
+ */
+export const prepareTemplateHtml = (
+  template: { html: string; preview_text?: string },
+  options: { withUnsubscribe: boolean }
+): string => {
   let html = template.html;
 
   if (template.preview_text) {
@@ -115,17 +132,14 @@ export const renderEmail = (
     html = /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, (tag) => `${tag}${preheader}`) : preheader + html;
   }
 
-  if (ctx.unsubscribe_url && !usesUnsubscribeTag(html)) {
+  if (options.withUnsubscribe && !usesUnsubscribeTag(html)) {
     const footer =
       '<p style="font-size:12px;color:#888;text-align:center;margin-top:24px">' +
       'Don\'t want these emails? <a href="{{unsubscribe_url}}" style="color:#888">Unsubscribe</a></p>';
     html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${footer}</body>`) : html + footer;
   }
 
-  return {
-    subject: renderMergeTags(template.subject, values, { html: false }),
-    html: renderMergeTags(html, values, { html: true })
-  };
+  return html;
 };
 
 /* ---- Unsubscribe tokens ---- */

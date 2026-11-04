@@ -42,6 +42,10 @@ const config = {
   ENSEND_SECRET: process.env.ENSEND_SECRET!,
   ENSEND_NAME: process.env.ENSEND_NAME,
   ENSEND_MAIL: process.env.ENSEND_MAIL,
+  /** Public URL of the email images (e.g. a CDN). Defaults to BACKEND_URL/email-assets */
+  EMAIL_ASSETS_BASE_URL: process.env.EMAIL_ASSETS_BASE_URL,
+  /** "Contact Support" link in system emails. Defaults to the frontend URL */
+  SUPPORT_URL: process.env.SUPPORT_URL,
   FIELD_ENCRYPTION_KEY: process.env.FIELD_ENCRYPTION_KEY,
   SWAGGER_ENABLED: process.env.SWAGGER_ENABLED !== 'false',
   GROQ_API_KEY: process.env.GROQ_API_KEY!,
@@ -57,10 +61,7 @@ const config = {
   GOOGLE_ADS_API_VERSION: process.env.GOOGLE_ADS_API_VERSION || 'v25',
   MIDLINE_API_KEY: process.env.MIDLINE_API_KEY,
   MIDLINE_SERVICE_NAME: process.env.MIDLINE_SERVICE_NAME ?? 'crm-backend',
-  /** Sender.net — broadcasts and email triggers */
-  SENDER_API_TOKEN: process.env.SENDER_API_TOKEN,
-  SENDER_FROM_EMAIL: process.env.SENDER_FROM_EMAIL,
-  SENDER_FROM_NAME: process.env.SENDER_FROM_NAME,
+  /** Legacy Sender.net bounce webhook (sending now goes through Ensend) */
   SENDER_WEBHOOK_SECRET: process.env.SENDER_WEBHOOK_SECRET,
   EMAIL_MAX_SEND_RATE: Number(process.env.EMAIL_MAX_SEND_RATE) > 0 ? Number(process.env.EMAIL_MAX_SEND_RATE) : 5,
   EMAIL_DISPATCH_INTERVAL_SECONDS:

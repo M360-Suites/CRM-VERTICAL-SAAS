@@ -1,0 +1,12 @@
+Hi {{full_name}},
+
+We received a request to verify your staff account credentials for CRM360 workspace access. Please use the secure one-time passcode (OTP) below to authenticate your session and continue.
+
+Passcode: {{otp}}
+Expires in {{expires_in_minutes}} minutes.
+
+If you did not initiate this login or staff verification request, please disregard this message or alert your system administrator immediately to protect your CRM workspace.
+
+Best regards,
+The CRM360 Team
+Contact Support: {{support_url}}

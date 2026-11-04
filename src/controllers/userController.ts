@@ -240,6 +240,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
 
     if (is_active !== undefined) {
       update.is_active = is_active;
+      update.deactivated_at = is_active ? null : new Date();
     }
 
     if (Object.keys(update).length === 0) {
@@ -488,7 +489,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
     const user = await User.findOneAndUpdate(
       { _id: id, organization_id: organizationId },
-      { is_active: false },
+      { is_active: false, deactivated_at: new Date() },
       { new: true }
     );
 

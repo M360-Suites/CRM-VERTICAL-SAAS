@@ -380,6 +380,25 @@ describe('auth controller edge cases', () => {
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Please verify your email before continuing' }));
       expect(res.cookie).toHaveBeenCalledWith('crm_IV', 'false', expect.any(Object));
     });
+
+    it('returns 403 and issues no token for deactivated users', async () => {
+      mockUserFindOne.mockResolvedValueOnce({
+        _id: 'user-id',
+        email: 'user@example.com',
+        is_active: false,
+        deactivated_at: new Date(),
+        comparePassword: jest.fn().mockResolvedValue(true)
+      });
+      const req = createMockRequest({ email: 'user@example.com', password: 'Secret123!' });
+      const res = createMockResponse();
+
+      await login(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'ACCOUNT_DEACTIVATED' }));
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
   });
 
   //Test cases for forgotPassword

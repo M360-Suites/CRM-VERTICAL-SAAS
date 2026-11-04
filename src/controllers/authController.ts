@@ -415,6 +415,15 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
+    if (user.deactivated_at) {
+      res.status(403).json({
+        status: false,
+        message: 'Your account has been deactivated. Contact your organization admin to regain access.',
+        code: 'ACCOUNT_DEACTIVATED'
+      });
+      return;
+    }
+
     const organizationId = await ensureUserOrganization(user);
 
     const token = generateToken({
@@ -623,6 +632,11 @@ export const googleCallback = async (req: AuthRequest, res: Response): Promise<v
       organization.owner_id = user._id as mongoose.Types.ObjectId;
       await organization.save();
       await seedDefaultPipelineForOrganization(organization._id as mongoose.Types.ObjectId);
+    }
+
+    if (user.deactivated_at) {
+      res.redirect(`${getFrontendUrl()}?auth=error&code=ACCOUNT_DEACTIVATED`);
+      return;
     }
 
     const organizationId = await ensureUserOrganization(user);

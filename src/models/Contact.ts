@@ -67,8 +67,8 @@ const ContactSchema = new Schema<IContact>(
     first_name: { type: String, required: true },
     /** Optional so single-word names from CSV imports are accepted */
     last_name: { type: String, default: '' },
-    email: { type: String },
-    phone: { type: String },
+    email: { type: String, trim: true, lowercase: true },
+    phone: { type: String, trim: true },
     role_title: { type: String },
     company_id: { type: Schema.Types.ObjectId, ref: 'Company' },
     owner_id: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -108,6 +108,7 @@ const ContactSchema = new Schema<IContact>(
 
 ContactSchema.index({ organization_id: 1, first_name: 1, last_name: 1 });
 ContactSchema.index({ organization_id: 1, email: 1 });
+ContactSchema.index({ organization_id: 1, phone: 1 });
 ContactSchema.index({ organization_id: 1, company_id: 1 });
 ContactSchema.index({ organization_id: 1, owner_id: 1 });
 ContactSchema.index({ organization_id: 1, temperature: 1 });

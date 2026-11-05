@@ -72,5 +72,6 @@ const DealSchema = new Schema<IDeal>(
 DealSchema.index({ organization_id: 1, stage_id: 1 });
 DealSchema.index({ organization_id: 1, owner_id: 1 });
 DealSchema.index({ organization_id: 1, company_id: 1 });
+DealSchema.index({ organization_id: 1, contact_id: 1, status: 1 });
 
 export const Deal = mongoose.model<IDeal>('Deal', DealSchema);

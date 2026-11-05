@@ -6,13 +6,25 @@ import { Contact } from '../models/Contact';
 import { Activity } from '../models/Activity';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { AuthRequest, PaginatedResponse } from '../types';
-import { requireOrganization } from '../utils/tenant';
+import { canViewDeal, dealScope, requireOrganization } from '../utils/tenant';
 import { MAX_IMPORT_ROWS, nameKey, parseImportCsv } from '../utils/csvImport';
 import { parseLeadValue } from '../utils/leadValue';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
 import { assignDealOwner } from '../services/dealAssignmentService';
 import { handleError } from '../utils/errorHandler';
+import { dealKey, findDuplicateDeal, isTruthyFlag, loadExistingDealKeys } from '../utils/duplicates';
+import type { DuplicateDeal } from '../utils/duplicates';
+
+/** 409 body pointing the client at the open deal that already exists */
+const duplicateDealResponse = (res: Response, duplicate: DuplicateDeal): void => {
+  res.status(409).json({
+    status: false,
+    code: 'DUPLICATE_DEAL',
+    message: `An open deal named "${duplicate.title}" already exists for this contact/company`,
+    data: { duplicate }
+  });
+};
 
 interface DealQuery {
   page?: number;
@@ -65,6 +77,8 @@ export const listDeals = async (req: AuthRequest, res: Response): Promise<void> 
     else if (owner_id) query.owner_id = new mongoose.Types.ObjectId(owner_id);
     if (stage_id) query.stage_id = new mongoose.Types.ObjectId(stage_id);
     if (status) query.status = status;
+    // Applied last so a sales rep's owner_id filter can't widen their view
+    Object.assign(query, dealScope(req));
 
     const skip = (page - 1) * limit;
 
@@ -104,7 +118,7 @@ export const getAllDeals = async (req: AuthRequest, res: Response): Promise<void
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const deals = await Deal.find({ organization_id: organizationId })
+    const deals = await Deal.find({ organization_id: organizationId, ...dealScope(req) })
       .populate('stage_id', 'name order is_won is_lost')
       .populate('company_id', 'name industry website')
       .populate('contact_id', 'first_name last_name email')
@@ -137,7 +151,7 @@ export const getDealById = async (req: AuthRequest, res: Response): Promise<void
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const deal = await Deal.findOne({ _id: id, organization_id: organizationId })
+    const deal = await Deal.findOne({ _id: id, organization_id: organizationId, ...dealScope(req) })
       .populate('stage_id', 'name order is_won is_lost')
       .populate('company_id', 'name industry website')
       .populate('contact_id', 'first_name last_name email phone')
@@ -168,6 +182,8 @@ interface CreateDealBody {
   industry?: string;
   company_id?: string;
   contact_id?: string;
+  /** Skip the duplicate check */
+  allow_duplicate?: boolean;
 }
 
 export const createDeal = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -181,7 +197,8 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
       source,
       industry,
       company_id,
-      contact_id
+      contact_id,
+      allow_duplicate
     } = req.body as CreateDealBody;
 
     const organizationId = requireOrganization(req, res);
@@ -228,6 +245,11 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
         message: 'Contact not found'
       });
       return;
+    }
+
+    if (!isTruthyFlag(allow_duplicate)) {
+      const duplicate = await findDuplicateDeal(organizationId, { title, contact_id, company_id });
+      if (duplicate) return duplicateDealResponse(res, duplicate);
     }
 
     const deal = new Deal({
@@ -281,6 +303,7 @@ interface UpdateDealBody {
   industry?: string;
   company_id?: string | null;
   contact_id?: string | null;
+  allow_duplicate?: boolean;
 }
 
 export const updateDeal = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -296,7 +319,8 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const updateObj: Record<string, unknown> = { ...updateData };
+    const { allow_duplicate, ...fields } = updateData;
+    const updateObj: Record<string, unknown> = { ...fields };
     // Ownership changes go through PATCH /deals/:id/assign; tenancy never changes
     delete updateObj.owner_id;
     delete updateObj.organization_id;
@@ -330,7 +354,9 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const existingDeal = await Deal.findOne({ _id: id, organization_id: organizationId }).select('owner_id stage_id').lean();
+    const existingDeal = await Deal.findOne({ _id: id, organization_id: organizationId })
+      .select('owner_id stage_id title status contact_id company_id')
+      .lean();
     if (!existingDeal) {
       res.status(404).json({
         status: false,
@@ -345,6 +371,22 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
         message: "You don't have permission to update this deal"
       });
       return;
+    }
+
+    // Renaming or re-linking an open deal must not collide with another open deal
+    const identityChanged = 'title' in fields || 'contact_id' in fields || 'company_id' in fields;
+    const staysOpen = (fields.status ?? existingDeal.status) === 'open';
+    if (identityChanged && staysOpen && !isTruthyFlag(allow_duplicate)) {
+      const duplicate = await findDuplicateDeal(
+        organizationId,
+        {
+          title: 'title' in fields ? fields.title : existingDeal.title,
+          contact_id: 'contact_id' in fields ? fields.contact_id : existingDeal.contact_id,
+          company_id: 'company_id' in fields ? fields.company_id : existingDeal.company_id
+        },
+        id
+      );
+      if (duplicate) return duplicateDealResponse(res, duplicate);
     }
 
     let stageChangeInfo: { stage_id: string; stage_name: string } | null = null;
@@ -424,7 +466,7 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
         stage_id: stageChangeInfo.stage_id,
         title: deal.title,
         userId: req.user.id
-      });
+      }, deal.owner_id);
     }
 
     if (stageChangeInfo) {
@@ -483,6 +525,11 @@ export const getDealActivities = async (req: AuthRequest, res: Response): Promis
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
+    if (!(await canViewDeal(req, organizationId, id))) {
+      res.status(404).json({ status: false, message: 'Deal not found' });
+      return;
+    }
+
     const activities = await Activity.find({ deal_id: id, organization_id: organizationId })
       .populate('user_id', 'email display_name')
       .sort({ created_at: -1 })
@@ -510,6 +557,11 @@ export const getDealTasks = async (req: AuthRequest, res: Response): Promise<voi
     const { Task } = await import('../models/Task');
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
+
+    if (!(await canViewDeal(req, organizationId, id))) {
+      res.status(404).json({ status: false, message: 'Deal not found' });
+      return;
+    }
 
     const tasks = await Task.find({ deal_id: id, organization_id: organizationId })
       .populate('owner_id', 'email display_name')
@@ -539,7 +591,7 @@ export const getDealStats = async (req: AuthRequest, res: Response): Promise<voi
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const deal = await Deal.findOne({ _id: id, organization_id: organizationId }).lean();
+    const deal = await Deal.findOne({ _id: id, organization_id: organizationId, ...dealScope(req) }).lean();
     if (!deal) {
       res.status(404).json({
         status: false,
@@ -688,7 +740,7 @@ export const updateDealStage = async (req: AuthRequest, res: Response): Promise<
         stage_id: targetStageId,
         title: deal.title,
         userId: req.user.id
-      });
+      }, deal.owner_id);
     }
 
     void queueDealTriggers({ organizationId, dealId: deal._id, stageId: targetStageId });
@@ -763,7 +815,7 @@ export const bulkUpdateStage = async (req: AuthRequest, res: Response): Promise<
       _id: { $in: validObjectIds },
       organization_id: organizationId,
       stage_id: { $ne: new mongoose.Types.ObjectId(stage_id) }
-    }).select('_id').lean();
+    }).select('_id owner_id').lean();
 
     const result = await Deal.updateMany(
       { _id: { $in: validObjectIds }, organization_id: organizationId },
@@ -793,7 +845,7 @@ export const bulkUpdateStage = async (req: AuthRequest, res: Response): Promise<
         stage_id,
         title: `bulk-${result.modifiedCount}`,
         userId: req.user.id
-      });
+      }, movingDeals.map((movingDeal) => movingDeal.owner_id));
     }
 
     for (const moved of movingDeals) {
@@ -991,7 +1043,11 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
     const ownerId = req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined;
     const now = new Date();
     const errors: string[] = [];
+    const duplicates: string[] = [];
     const validDeals: Record<string, unknown>[] = [];
+    // Open deals already in the org, and rows earlier in this file, keyed by title + contact + company
+    const existingDealKeys = await loadExistingDealKeys(organizationId, distinct('title'));
+    const seenDealRows = new Map<string, number>();
 
     rows.forEach(({ fields, custom_fields }, i) => {
       const row = `Row ${i + 1}`;
@@ -1084,12 +1140,28 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
         if (!contact) extra.contact_email = fields.contact_email;
       }
 
+      const resolvedCompanyId = companyId ?? contact?.company_id;
+      const resolvedStatus = stage?.is_won ? 'won' : stage?.is_lost ? 'lost' : status ?? 'open';
+      if (resolvedStatus === 'open') {
+        const key = dealKey(fields.title, contact?._id, resolvedCompanyId);
+        if (existingDealKeys.has(key)) {
+          duplicates.push(`${row}: an open deal named "${fields.title}" already exists for this contact/company`);
+          return;
+        }
+        const earlierRow = seenDealRows.get(key);
+        if (earlierRow !== undefined) {
+          duplicates.push(`${row}: duplicate of row ${earlierRow + 1} in this file`);
+          return;
+        }
+        seenDealRows.set(key, i);
+      }
+
       validDeals.push({
         title: fields.title,
         value,
         currency: fields.currency ? fields.currency.toUpperCase() : undefined,
         // A won/lost stage decides the status; otherwise use the column, default open
-        status: stage?.is_won ? 'won' : stage?.is_lost ? 'lost' : status ?? 'open',
+        status: resolvedStatus,
         expected_close_date: expectedCloseDate,
         stage_id: stage?._id,
         stage_changed_at: stage ? now : undefined,
@@ -1097,7 +1169,7 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
         description: fields.description || undefined,
         source: fields.source || 'csv_import',
         industry: fields.industry || undefined,
-        company_id: companyId ?? contact?.company_id,
+        company_id: resolvedCompanyId,
         contact_id: contact?._id,
         owner_id: ownerId,
         organization_id: organizationId,
@@ -1129,8 +1201,10 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
       data: {
         imported,
         failed: errors.length,
+        skipped: duplicates.length,
         custom_columns,
-        errors: errors.length > 0 ? errors : undefined
+        errors: errors.length > 0 ? errors : undefined,
+        duplicates: duplicates.length > 0 ? duplicates : undefined
       }
     });
   } catch (error) {

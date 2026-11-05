@@ -6,10 +6,11 @@ import { Deal } from '../models/Deal';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { User } from '../models/User';
 import { ApiResponse, AuthRequest } from '../types';
-import { requireOrganization } from '../utils/tenant';
+import { canViewDeal, dealScope, requireOrganization } from '../utils/tenant';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
 import { handleError } from '../utils/errorHandler';
+import { findDuplicateDeal, isTruthyFlag } from '../utils/duplicates';
 
 const isValidObjectId = (value: unknown): value is string =>
   typeof value === 'string' && mongoose.Types.ObjectId.isValid(value);
@@ -140,7 +141,7 @@ export const getPipeline = async (req: AuthRequest, res: Response): Promise<void
 
     const stageIds = stages.map((stage) => stage._id);
     const [deals, teamMembers] = await Promise.all([
-      Deal.find({ organization_id: organizationId, stage_id: { $in: stageIds } })
+      Deal.find({ organization_id: organizationId, stage_id: { $in: stageIds }, ...dealScope(req) })
         .populate('company_id', 'name')
         .sort({ created_at: -1 })
         .lean(),
@@ -224,7 +225,8 @@ export const getPipelineDeals = async (req: AuthRequest, res: Response): Promise
 
     const deals = await Deal.find({
       organization_id: organizationId,
-      stage_id: { $in: stages.map((stage) => stage._id) }
+      stage_id: { $in: stages.map((stage) => stage._id) },
+      ...dealScope(req)
     })
       .populate('company_id', 'name')
       .sort({ created_at: -1 })
@@ -247,6 +249,7 @@ interface DealBody {
   industry?: string;
   stage_id?: string;
   company_id?: string | null;
+  allow_duplicate?: boolean;
 }
 
 export const createPipelineDeal = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -292,6 +295,19 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
       const companyExists = await Company.exists({ _id: body.company_id, organization_id: organizationId });
       if (!companyExists) {
         res.status(404).json({ status: false, message: 'Company not found' });
+        return;
+      }
+    }
+
+    if (!isTruthyFlag(body.allow_duplicate)) {
+      const duplicate = await findDuplicateDeal(organizationId, { title, company_id: body.company_id });
+      if (duplicate) {
+        res.status(409).json({
+          status: false,
+          code: 'DUPLICATE_DEAL',
+          message: `An open deal named "${duplicate.title}" already exists`,
+          data: { duplicate }
+        });
         return;
       }
     }
@@ -519,7 +535,7 @@ export const movePipelineDealStage = async (req: AuthRequest, res: Response): Pr
         stage_id,
         title: deal?.title || '',
         userId: req.user.id
-      });
+      }, deal?.owner_id);
     }
 
     if (deal) void queueDealTriggers({ organizationId, dealId: deal._id, stageId: stage_id });
@@ -712,6 +728,11 @@ export const getPipelineDealActivities = async (req: AuthRequest, res: Response)
     const { dealId } = req.params as { dealId: string };
     if (!isValidObjectId(dealId)) {
       res.status(400).json({ message: 'Invalid deal ID' });
+      return;
+    }
+
+    if (!(await canViewDeal(req, organizationId, dealId))) {
+      res.status(404).json({ message: 'Deal not found' });
       return;
     }
 

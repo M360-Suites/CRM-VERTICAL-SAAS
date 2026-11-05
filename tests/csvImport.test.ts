@@ -26,7 +26,7 @@ jest.mock('../src/middleware/auth', () => ({
 
 jest.mock('../src/models/Contact', () => ({ Contact: { find: jest.fn(), insertMany: jest.fn() } }));
 jest.mock('../src/models/Company', () => ({ Company: { find: jest.fn(), insertMany: jest.fn() } }));
-jest.mock('../src/models/Deal', () => ({ Deal: { insertMany: jest.fn() } }));
+jest.mock('../src/models/Deal', () => ({ Deal: { find: jest.fn(), insertMany: jest.fn() } }));
 jest.mock('../src/models/Activity', () => ({ Activity: { insertMany: jest.fn() } }));
 jest.mock('../src/models/Pipeline', () => ({ Pipeline: { find: jest.fn() }, PipelineStage: { find: jest.fn() } }));
 
@@ -66,6 +66,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   (Contact.find as jest.Mock).mockReturnValue(query([]));
   (Company.find as jest.Mock).mockReturnValue(query([]));
+  (Deal.find as jest.Mock).mockReturnValue(query([]));
   echoInsert(Contact as unknown as { insertMany: jest.Mock });
   echoInsert(Company as unknown as { insertMany: jest.Mock });
   echoInsert(Deal as unknown as { insertMany: jest.Mock });
@@ -160,6 +161,36 @@ describe('POST /contacts/bulk-import', () => {
     expect(docs[0].custom_fields).toEqual({});
     expect(docs[1].company_id).toBeUndefined();
     expect(docs[1].custom_fields).toEqual({ company: 'Globex' });
+  });
+
+  it('skips rows that duplicate an existing contact or an earlier row', async () => {
+    (Contact.find as jest.Mock).mockReturnValue(query([{ email: 'taken@x.io', phone: '5550199' }]));
+
+    const response = await upload(
+      '/contacts/bulk-import',
+      [
+        'name,email,phone',
+        'Ada,TAKEN@x.io,5550100',
+        'Bob,bob@x.io,5550199',
+        'Cy,cy@x.io,5550102',
+        'Cy Again,CY@x.io,5550103',
+        'Di,di@x.io,5550102'
+      ].join('\n')
+    );
+
+    expect(response.body.data).toMatchObject({
+      imported: 1,
+      failed: 0,
+      skipped: 4,
+      duplicates: [
+        'Row 1: a contact with email taken@x.io already exists',
+        'Row 2: a contact with phone 5550199 already exists',
+        'Row 4: duplicate of row 3 in this file',
+        'Row 5: duplicate of row 3 in this file'
+      ]
+    });
+    const [docs] = (Contact.insertMany as jest.Mock).mock.calls[0];
+    expect(docs.map((doc: { email: string }) => doc.email)).toEqual(['cy@x.io']);
   });
 });
 
@@ -265,6 +296,29 @@ describe('POST /deals/bulk-import', () => {
     expect(docs[0]).toMatchObject({ contact_id: CONTACT_ID, company_id: COMPANY_ID, custom_fields: {} });
     expect(docs[1].contact_id).toBeUndefined();
     expect(docs[1].custom_fields).toEqual({ contact_email: 'nobody@example.com' });
+  });
+
+  it('skips open deals that already exist or repeat within the file, but allows closed ones', async () => {
+    (Deal.find as jest.Mock).mockReturnValue(query([{ title: 'Renewal' }]));
+
+    const response = await upload(
+      '/deals/bulk-import',
+      ['title,stage', 'renewal,', 'Upsell,', 'UPSELL,', 'Renewal,closed won'].join('\n')
+    );
+
+    expect(response.body.data).toMatchObject({
+      imported: 2,
+      skipped: 2,
+      duplicates: [
+        'Row 1: an open deal named "renewal" already exists for this contact/company',
+        'Row 3: duplicate of row 2 in this file'
+      ]
+    });
+    const [docs] = (Deal.insertMany as jest.Mock).mock.calls[0];
+    expect(docs.map((doc: { title: string; status: string }) => [doc.title, doc.status])).toEqual([
+      ['Upsell', 'open'],
+      ['Renewal', 'won']
+    ]);
   });
 
   it('rejects an unknown status', async () => {

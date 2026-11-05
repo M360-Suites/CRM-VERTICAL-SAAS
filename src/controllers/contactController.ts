@@ -10,9 +10,21 @@ import { Company } from '../models/Company';
 import { Deal } from '../models/Deal';
 import { Task } from '../models/Task';
 import { AuthRequest, PaginatedResponse } from '../types';
-import { requireOrganization } from '../utils/tenant';
+import { dealScope, requireOrganization } from '../utils/tenant';
 import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, nameKey, parseImportCsv } from '../utils/csvImport';
 import { handleError } from '../utils/errorHandler';
+import { emailKey, findDuplicateContact, isTruthyFlag, loadExistingContactKeys, phoneKey } from '../utils/duplicates';
+import type { DuplicateContact } from '../utils/duplicates';
+
+/** 409 body pointing the client at the contact that already exists */
+const duplicateContactResponse = (res: Response, duplicate: DuplicateContact): void => {
+  res.status(409).json({
+    status: false,
+    code: 'DUPLICATE_CONTACT',
+    message: `A contact with this ${duplicate.matched_on} already exists`,
+    data: { duplicate }
+  });
+};
 
 /** Query parameters for listing contacts */
 interface ContactQuery {
@@ -164,6 +176,8 @@ interface CreateContactBody {
   company_id?: string;
   temperature?: Temperature;
   tags?: string[];
+  /** Skip the duplicate check (e.g. two people genuinely sharing an office phone) */
+  allow_duplicate?: boolean;
 }
 
 /**
@@ -180,7 +194,8 @@ export const createContact = async (req: AuthRequest, res: Response): Promise<vo
       role_title,
       company_id,
       temperature,
-      tags
+      tags,
+      allow_duplicate
     } = req.body as CreateContactBody;
 
     if (!first_name || !last_name) {
@@ -201,6 +216,11 @@ export const createContact = async (req: AuthRequest, res: Response): Promise<vo
 
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
+
+    if (!isTruthyFlag(allow_duplicate)) {
+      const duplicate = await findDuplicateContact(organizationId, { email, phone });
+      if (duplicate) return duplicateContactResponse(res, duplicate);
+    }
 
     const contact = new Contact({
       first_name,
@@ -238,6 +258,7 @@ interface UpdateContactBody {
   temperature?: Temperature;
   tags?: string[];
   last_contacted_at?: string;
+  allow_duplicate?: boolean;
 }
 
 /**
@@ -257,7 +278,8 @@ export const updateContact = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const updateObj: Record<string, unknown> = { ...updateData };
+    const { allow_duplicate, ...fields } = updateData;
+    const updateObj: Record<string, unknown> = { ...fields };
 
     if (updateData.company_id) {
       updateObj.company_id = new mongoose.Types.ObjectId(updateData.company_id);
@@ -271,6 +293,12 @@ export const updateContact = async (req: AuthRequest, res: Response): Promise<vo
 
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
+
+    // Changing email/phone must not collide with another contact
+    if (!isTruthyFlag(allow_duplicate) && (fields.email || fields.phone)) {
+      const duplicate = await findDuplicateContact(organizationId, { email: fields.email, phone: fields.phone }, id);
+      if (duplicate) return duplicateContactResponse(res, duplicate);
+    }
 
     const contact = await Contact.findOneAndUpdate(
       { _id: id, organization_id: organizationId },
@@ -379,7 +407,7 @@ export const getContactDeals = async (req: AuthRequest, res: Response): Promise<
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const deals = await Deal.find({ contact_id: id, organization_id: organizationId })
+    const deals = await Deal.find({ contact_id: id, organization_id: organizationId, ...dealScope(req) })
       .populate('stage_id', 'name')
       .populate('company_id', 'name')
       .populate('owner_id', 'email display_name')
@@ -602,7 +630,17 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
     const knownCompanyIds = new Set(companiesById.map((company) => company._id.toString()));
     const companyIdByName = new Map(companiesByName.map((company) => [nameKey(company.name), company._id]));
 
+    // Rows matching an existing contact (or an earlier row in this file) are skipped, not re-created
+    const existing = await loadExistingContactKeys(
+      organizationId,
+      [...new Set(rows.map(({ fields }) => emailKey(fields.email)).filter((v): v is string => !!v))],
+      [...new Set(rows.map(({ fields }) => phoneKey(fields.phone)).filter((v): v is string => !!v))]
+    );
+    const seenEmails = new Map<string, number>();
+    const seenPhones = new Map<string, number>();
+
     const errors: string[] = [];
+    const duplicates: string[] = [];
     const validContacts: Record<string, unknown>[] = [];
 
     rows.forEach(({ fields, custom_fields }, i) => {
@@ -625,6 +663,22 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
         return;
       }
 
+      const email = emailKey(fields.email) as string;
+      const phone = phoneKey(fields.phone) as string;
+      if (existing.emails.has(email)) {
+        duplicates.push(`${row}: a contact with email ${email} already exists`);
+        return;
+      }
+      if (existing.phones.has(phone)) {
+        duplicates.push(`${row}: a contact with phone ${phone} already exists`);
+        return;
+      }
+      const earlierRow = seenEmails.get(email) ?? seenPhones.get(phone);
+      if (earlierRow !== undefined) {
+        duplicates.push(`${row}: duplicate of row ${earlierRow + 1} in this file`);
+        return;
+      }
+
       let companyId: mongoose.Types.ObjectId | undefined;
       if (fields.company_id) {
         if (!mongoose.Types.ObjectId.isValid(fields.company_id) || !knownCompanyIds.has(fields.company_id)) {
@@ -639,8 +693,8 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
       validContacts.push({
         first_name,
         last_name,
-        email: fields.email.toLowerCase(),
-        phone: fields.phone,
+        email,
+        phone,
         role_title: fields.role_title || undefined,
         company_id: companyId,
         temperature: parseTemperature(fields.temperature),
@@ -650,6 +704,8 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
         owner_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
         organization_id: organizationId
       });
+      seenEmails.set(email, i);
+      seenPhones.set(phone, i);
     });
 
     let imported = 0;
@@ -664,8 +720,10 @@ export const bulkImportContacts = async (req: AuthRequest, res: Response): Promi
       data: {
         imported,
         failed: errors.length,
+        skipped: duplicates.length,
         custom_columns,
-        errors: errors.length > 0 ? errors : undefined
+        errors: errors.length > 0 ? errors : undefined,
+        duplicates: duplicates.length > 0 ? duplicates : undefined
       }
     });
   } catch (error) {

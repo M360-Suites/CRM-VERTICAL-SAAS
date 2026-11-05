@@ -23,3 +23,24 @@ export const tenantQuery = (req: AuthRequest, res: Response): Record<string, mon
   const organizationId = requireOrganization(req, res);
   return organizationId ? { organization_id: organizationId } : null;
 };
+
+/**
+ * Deal visibility: sales reps only see deals assigned to them; every other role sees all
+ * deals in the organization. Spread into any Deal query that returns deal records.
+ */
+export const dealScope = (req: AuthRequest): { owner_id?: mongoose.Types.ObjectId } =>
+  req.user?.role === 'sales_rep' && req.user.id && mongoose.Types.ObjectId.isValid(req.user.id)
+    ? { owner_id: new mongoose.Types.ObjectId(req.user.id) }
+    : {};
+
+/** True when the caller may see this deal (always true for roles without deal scoping) */
+export const canViewDeal = async (
+  req: AuthRequest,
+  organizationId: mongoose.Types.ObjectId,
+  dealId: string | mongoose.Types.ObjectId
+): Promise<boolean> => {
+  const scope = dealScope(req);
+  if (!scope.owner_id) return true;
+  const { Deal } = await import('../models/Deal');
+  return !!(await Deal.exists({ _id: dealId, organization_id: organizationId, ...scope }));
+};

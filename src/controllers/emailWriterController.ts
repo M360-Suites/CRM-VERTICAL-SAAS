@@ -15,7 +15,7 @@ import { Deal } from '../models/Deal';
 import { Company } from '../models/Company';
 import { Activity } from '../models/Activity';
 import { IUser, User } from '../models/User';
-import { requireOrganization } from '../utils/tenant';
+import { dealScope, requireOrganization } from '../utils/tenant';
 import { decryptString } from '../utils/crypto';
 import { createRawEmail, getAuthedGmail, RawEmailAttachment } from '../utils/gmail';
 import { clearGmailConnection, getSafeGoogleErrorLog, isInvalidGoogleGrantError } from '../utils/gmailConnection';
@@ -263,7 +263,7 @@ export const generateEmailHandler = async (req: AuthRequest, res: Response): Pro
     }
 
     if (dealId) {
-      const deal = await Deal.findOne({ _id: dealId, organization_id: organizationId })
+      const deal = await Deal.findOne({ _id: dealId, organization_id: organizationId, ...dealScope(req) })
         .populate('company_id', 'name')
         .lean();
 
@@ -348,7 +348,7 @@ export const sendEmailHandler = async (req: AuthRequest, res: Response): Promise
     }
 
     if (dealId) {
-      const deal = await Deal.exists({ _id: dealId, organization_id: organizationId });
+      const deal = await Deal.exists({ _id: dealId, organization_id: organizationId, ...dealScope(req) });
       if (!deal) {
         res.status(404).json({ status: false, message: 'Deal not found' });
         return;

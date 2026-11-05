@@ -92,15 +92,15 @@
 
 | Feature | Admin | Sales Manager | Sales Rep | Viewer |
 |---------|-------|---------------|-----------|--------|
-| List all deals | 👁️ | 👁️ | 👁️ | 👁️ |
-| View deal activities | 👁️ | 👁️ | 👁️ | 👁️ |
+| List all deals | 👁️ | 👁️ | 🔒 (assigned only) | 👁️ |
+| View deal, its activities, tasks and stats | 👁️ | 👁️ | 🔒 (assigned only) | 👁️ |
 | Create deal | ✅ | ✅ | ✅ | ❌ |
 | Update deal | ✅ | ✅ | 🔒 (own only) | ❌ |
 | Move deal stage | ✅ | ✅ | 🔒 (own only) | ❌ |
 | Delete deal | ✅ | ✅ | ❌ | ❌ |
-| Get all deals (unpaginated) | 👁️ | 👁️ | 👁️ | 👁️ |
+| Get all deals (unpaginated) | 👁️ | 👁️ | 🔒 (assigned only) | 👁️ |
 
-> **Note:** Sales Reps can only update/move deals they own (checked by `owner_id`). Admin and Sales Manager can update/move any deal.
+> **Note:** Sales Reps only see and update/move deals assigned to them (`owner_id`). This applies everywhere deals are listed: the deals list, the pipeline board, a contact's or company's deals tab, and deal context for the AI email writer. Another rep's or an unassigned deal returns 404. Admin, Sales Manager and Viewer see every deal in the organization.
 
 ### 4.3 Stage Discussion (Internal Chat)
 

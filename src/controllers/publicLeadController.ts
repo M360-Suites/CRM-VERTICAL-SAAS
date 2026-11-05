@@ -17,6 +17,8 @@ import { ensureRevopsDefaults } from '../services/revopsDefaults';
 import { queueDealTriggers } from '../services/triggerService';
 import { extractCustomFields } from '../utils/customFields';
 import { handleError } from '../utils/errorHandler';
+import { Activity } from '../models/Activity';
+import { findDuplicateContact, findOpenDealForContact } from '../utils/duplicates';
 
 interface LeadCaptureBody {
   name?: string;
@@ -263,16 +265,35 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       return;
     }
 
-    const contact = await Contact.create({
-      first_name: first_name || 'Unknown',
-      last_name: last_name || 'Lead',
-      email,
-      phone,
-      organization_id: organization._id,
-      temperature: temperature || 'warm',
-      tags: [...new Set(['web-capture', source || 'script-tag', ...customTags])],
-      custom_fields: customFields
-    });
+    const leadTags = [...new Set(['web-capture', source || 'script-tag', ...customTags])];
+
+    // A returning lead (same email or phone) updates the existing contact instead of creating a second one
+    const match = await findDuplicateContact(organization._id as mongoose.Types.ObjectId, { email, phone });
+    const existingContact = match
+      ? await Contact.findOne({ _id: match._id, organization_id: organization._id })
+      : null;
+    const isReturningLead = !!existingContact;
+
+    let contact;
+    if (existingContact) {
+      if (!existingContact.email && email) existingContact.email = email;
+      if (!existingContact.phone && phone) existingContact.phone = phone;
+      existingContact.tags = [...new Set([...(existingContact.tags ?? []), ...leadTags])];
+      existingContact.custom_fields = { ...(existingContact.custom_fields ?? {}), ...customFields };
+      existingContact.markModified('custom_fields');
+      contact = await existingContact.save();
+    } else {
+      contact = await Contact.create({
+        first_name: first_name || 'Unknown',
+        last_name: last_name || 'Lead',
+        email,
+        phone,
+        organization_id: organization._id,
+        temperature: temperature || 'warm',
+        tags: leadTags,
+        custom_fields: customFields
+      });
+    }
 
     const dealTitle = await generateLeadTitle({
       message,
@@ -283,60 +304,77 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
     });
 
     let deal = null;
-    try {
-      const defaultPipeline = await Pipeline.findOne({ organization_id: organization._id, is_default: true }).lean();
-      const leadStage = defaultPipeline
-        ? await PipelineStage.findOne({
-            organization_id: organization._id,
-            pipeline_id: defaultPipeline._id,
-            name: LEAD_STAGE_NAME
-          }).lean()
-        : null;
-
-      deal = await Deal.create({
-        title: dealTitle,
-        summary,
-        // The form's budget/value when usable, otherwise the deal lands at 0
-        value: dealValue ?? 0,
-        ...(currency ? { currency } : {}),
-        status: 'open',
+    // A returning lead with a deal still in progress keeps that deal rather than opening a duplicate
+    const openDeal = isReturningLead ? await findOpenDealForContact(organization._id as mongoose.Types.ObjectId, contact._id as mongoose.Types.ObjectId) : null;
+    if (openDeal) {
+      deal = openDeal;
+      await Activity.create({
+        type: 'lead_resubmitted',
+        content: `Lead form submitted again${source ? ` via ${source}` : ''}`,
         contact_id: contact._id,
+        deal_id: openDeal._id,
         organization_id: organization._id,
-        company_id: undefined,
-        source: source || 'web-capture',
-        description: message,
-        stage_id: leadStage?._id,
-        stage_changed_at: new Date(),
-        custom_fields: customFields
-      });
-      void queueDealTriggers({ organizationId: organization._id as mongoose.Types.ObjectId, dealId: deal._id, stageId: leadStage?._id, isNew: true });
-    } catch (dealError) {
-      logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
+        metadata: { source: source || 'web-capture', message, custom_fields: customFields }
+      }).catch((activityError) => logger.warn({ err: activityError }, 'Failed to log lead resubmission'));
+    } else {
+      try {
+        const defaultPipeline = await Pipeline.findOne({ organization_id: organization._id, is_default: true }).lean();
+        const leadStage = defaultPipeline
+          ? await PipelineStage.findOne({
+              organization_id: organization._id,
+              pipeline_id: defaultPipeline._id,
+              name: LEAD_STAGE_NAME
+            }).lean()
+          : null;
+
+        deal = await Deal.create({
+          title: dealTitle,
+          summary,
+          // The form's budget/value when usable, otherwise the deal lands at 0
+          value: dealValue ?? 0,
+          ...(currency ? { currency } : {}),
+          status: 'open',
+          contact_id: contact._id,
+          organization_id: organization._id,
+          company_id: undefined,
+          source: source || 'web-capture',
+          description: message,
+          stage_id: leadStage?._id,
+          stage_changed_at: new Date(),
+          custom_fields: customFields
+        });
+        void queueDealTriggers({ organizationId: organization._id as mongoose.Types.ObjectId, dealId: deal._id, stageId: leadStage?._id, isNew: true });
+      } catch (dealError) {
+        logger.warn({ err: dealError }, 'Failed to push public lead into pipeline, contact saved only');
+      }
     }
 
     let routing: Awaited<ReturnType<typeof routeNewLead>> | null = null;
-    try {
-      await ensureRevopsDefaults(organization._id as mongoose.Types.ObjectId);
-      routing = await routeNewLead(
-        contact,
-        {
-          intent_score: pick('intent_score', 'intentScore'),
-          temperature,
-          region: pick<string>('region'),
-          tier: pick<string>('tier'),
-          platform: pick<string>('platform'),
-          source,
-          utm_source: pick<string>('utm_source'),
-          utm_medium: pick<string>('utm_medium'),
-          gclid: pick<string>('gclid', 'gbraid', 'wbraid'),
-          fbclid: pick<string>('fbclid'),
-          li_fat_id: pick<string>('li_fat_id'),
-          ttclid: pick<string>('ttclid')
-        },
-        { dealId: (deal?._id as mongoose.Types.ObjectId | undefined) ?? null }
-      );
-    } catch (routingError) {
-      logger.warn({ err: routingError }, 'Lead routing failed, lead saved unrouted');
+    // Returning leads keep their current owner; only brand-new leads are routed
+    if (!isReturningLead) {
+      try {
+        await ensureRevopsDefaults(organization._id as mongoose.Types.ObjectId);
+        routing = await routeNewLead(
+          contact,
+          {
+            intent_score: pick('intent_score', 'intentScore'),
+            temperature,
+            region: pick<string>('region'),
+            tier: pick<string>('tier'),
+            platform: pick<string>('platform'),
+            source,
+            utm_source: pick<string>('utm_source'),
+            utm_medium: pick<string>('utm_medium'),
+            gclid: pick<string>('gclid', 'gbraid', 'wbraid'),
+            fbclid: pick<string>('fbclid'),
+            li_fat_id: pick<string>('li_fat_id'),
+            ttclid: pick<string>('ttclid')
+          },
+          { dealId: (deal?._id as mongoose.Types.ObjectId | undefined) ?? null }
+        );
+      } catch (routingError) {
+        logger.warn({ err: routingError }, 'Lead routing failed, lead saved unrouted');
+      }
     }
 
     await notifyAdminsOfNewLead(organization._id, {
@@ -353,19 +391,20 @@ export const captureLead = async (req: PublicKeyRequest, res: Response): Promise
       value: deal?.value,
       currency: deal?.currency,
       intentScore: routing?.intent_score,
-      ownerId: routing?.owner_id ?? null
+      ownerId: routing?.owner_id ?? (contact.owner_id as mongoose.Types.ObjectId | undefined) ?? null
     });
 
-    res.status(201).json({
+    res.status(isReturningLead ? 200 : 201).json({
       status: true,
-      message: 'Lead captured successfully',
+      message: isReturningLead ? 'Lead matched an existing contact and was updated' : 'Lead captured successfully',
       data: {
         id: contact._id,
+        duplicate: isReturningLead,
         first_name: contact.first_name,
         last_name: contact.last_name,
         email: contact.email,
         deal_id: deal?._id ?? null,
-        deal_title: dealTitle,
+        deal_title: deal?.title ?? dealTitle,
         deal_value: deal ? deal.value ?? 0 : null,
         custom_fields: customFields
       }

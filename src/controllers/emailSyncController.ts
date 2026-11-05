@@ -411,7 +411,9 @@ export const createContactFromSender = async (req: AuthRequest, res: Response): 
       return;
     }
 
-    const existingContact = await Contact.findOne({ email: message.from_email, organization_id: organizationId });
+    // Case-insensitive so "Ada@X.io" and "ada@x.io" resolve to the same contact
+    const existingContact = await Contact.findOne({ email: message.from_email.trim(), organization_id: organizationId })
+      .collation({ locale: 'en', strength: 2 });
     if (existingContact) {
       message.contact_id = existingContact._id;
       await message.save();

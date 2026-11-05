@@ -4,7 +4,7 @@ import { Company, ICompany } from '../models/Company';
 import { Contact } from '../models/Contact';
 import { Deal } from '../models/Deal';
 import { AuthRequest, PaginatedResponse } from '../types';
-import { requireOrganization } from '../utils/tenant';
+import { dealScope, requireOrganization } from '../utils/tenant';
 import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, parseImportCsv } from '../utils/csvImport';
 import { handleError } from '../utils/errorHandler';
 
@@ -462,7 +462,7 @@ export const getCompanyDeals = async (req: AuthRequest, res: Response): Promise<
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const deals = await Deal.find({ company_id: id, organization_id: organizationId })
+    const deals = await Deal.find({ company_id: id, organization_id: organizationId, ...dealScope(req) })
       .populate('stage_id', 'name')
       .populate('contact_id', 'first_name last_name')
       .populate('owner_id', 'email display_name')

@@ -32,9 +32,13 @@ export interface IBroadcastStats {
 export interface IBroadcast extends Document {
   organization_id: mongoose.Types.ObjectId;
   name: string;
-  subject: string;
+  /** Empty while the draft is being written; required to send */
+  subject?: string;
   preview_text?: string;
-  html: string;
+  /** Empty while the draft is being written; required to send */
+  html?: string;
+  /** The email editor's own JSON (opaque to the backend) so the canvas can reload it */
+  design?: unknown;
   template_id?: mongoose.Types.ObjectId;
   audience: IBroadcastAudience;
   status: BroadcastStatus;
@@ -54,9 +58,10 @@ const BroadcastSchema = new Schema<IBroadcast>(
   {
     organization_id: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
     name: { type: String, required: true, trim: true, maxlength: 200 },
-    subject: { type: String, required: true, trim: true, maxlength: 300 },
+    subject: { type: String, trim: true, maxlength: 300 },
     preview_text: { type: String, trim: true, maxlength: 300 },
-    html: { type: String, required: true },
+    html: { type: String },
+    design: { type: Schema.Types.Mixed },
     template_id: { type: Schema.Types.ObjectId, ref: 'EmailTemplate' },
     audience: {
       type: new Schema<IBroadcastAudience>(

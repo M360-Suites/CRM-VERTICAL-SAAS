@@ -86,6 +86,16 @@ export const startBroadcast = async (broadcastId: mongoose.Types.ObjectId, sentB
   );
   if (!broadcast) throw new Error('Broadcast is not in a sendable state');
 
+  // Drafts can be saved without a subject or content; the send endpoint checks this,
+  // but a scheduled broadcast is re-checked here in case it slipped through
+  if (!broadcast.subject?.trim() || !broadcast.html?.trim()) {
+    await Broadcast.updateOne(
+      { _id: broadcast._id },
+      { $set: { status: 'failed', error: 'Broadcast has no subject or content', completed_at: new Date() } }
+    );
+    return 0;
+  }
+
   const filter = buildAudienceFilter(broadcast.organization_id, broadcast.audience);
   let queued = 0;
 
@@ -206,10 +216,10 @@ const loadSendContext = async (broadcastId: mongoose.Types.ObjectId): Promise<Br
       broadcast.sent_by ? User.findById(broadcast.sent_by).select('email').lean() : Promise.resolve(null)
     ]);
     // Unsubscribe links need BACKEND_URL; without it the footer is left out (as before)
-    const html = prepareTemplateHtml(broadcast, { withUnsubscribe: Boolean(config.BACKEND_URL) });
+    const html = prepareTemplateHtml({ ...broadcast, html: broadcast.html ?? '' }, { withUnsubscribe: Boolean(config.BACKEND_URL) });
     value = {
       broadcast,
-      template: toEnsendTemplate(broadcast.subject, html),
+      template: toEnsendTemplate(broadcast.subject ?? '', html),
       organizationName: organization?.name,
       replyTo: sender?.email
     };

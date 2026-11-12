@@ -1087,20 +1087,53 @@ User-configured automations: when something happens to a deal, send a template.
 
 ### Broadcasts
 
-Bulk email to contacts through Sender.net's transactional API, with per-contact history.
+Bulk email to contacts through Ensend (batches of 250), with per-contact history.
 
 **Access:** read = all roles · manage = admin only
 
 | Method | Endpoint | Description | Access |
 |--------|----------|-------------|--------|
-| GET | /broadcasts?status&search&page&limit | History with `stats { total, sent, failed, bounced, complained, skipped }` | read |
-| POST | /broadcasts | Create a draft: `{ name, template_id? , subject?, html?, preview_text?, audience }`. With `template_id` the subject/html are copied from the template | manage |
+| GET | /broadcasts?status&search&page&limit | History with `stats { total, sent, failed, bounced, complained, skipped }` (no `html`/`design`) | read |
+| POST | /broadcasts | Create a draft: `{ name, template_id?, subject?, html?, preview_text?, design?, audience? }`. **Only `name` is required**; subject and html are checked at send/test time. With `template_id` the subject, html, preview_text and design are copied from the template | manage |
 | POST | /broadcasts/audience/preview | `{ audience }` → `{ count, opted_out, sample }` | read |
-| GET / PATCH / DELETE | /broadcasts/:id | Get with html / edit (draft or scheduled only) / delete (drafts only) | read / manage |
-| POST | /broadcasts/:id/send | Send now (`202`), or `{ scheduled_at: ISO date-time }` to schedule | manage |
+| GET / PATCH / DELETE | /broadcasts/:id | Get with html + design / edit (draft or scheduled only, send only changed fields) / delete (drafts only) | read / manage |
+| POST | /broadcasts/:id/send | Send now (`202`), or `{ scheduled_at: ISO date-time }` to schedule (`200`). `400` "Add a subject before sending" if content is missing | manage |
 | POST | /broadcasts/:id/cancel | Stop a scheduled or sending broadcast; queued recipients are skipped | manage |
-| POST | /broadcasts/:id/test | Send to yourself with sample data | manage |
+| POST | /broadcasts/:id/test | Send a test with sample data. Goes to you, or `{ to: ["colleague@yourco.com"] }` sends to up to 5 **active members of your organization** → `{ ensend_ref, sent_to }` | manage |
 | GET | /broadcasts/:id/recipients?status&search&page&limit | Per-contact status: `queued`, `sending`, `sent`, `failed`, `bounced`, `complained`, `skipped` | read |
+| POST | /email-images | Upload an image for an email (multipart, field `image`; JPEG/PNG/GIF/WebP, max 5 MB) → `201 { url, public_id, width, height, format, bytes }`. `url` is a public Cloudinary https URL for `<img src>`. Not shown on the Documents page and not deletable, so sent emails never lose their images | manage |
+| GET | /email-suppressions?reason&search&page&limit | Contacts excluded from email (`reason`: `unsubscribed` / `bounced` / `complained`) → `{ data: [{ contact_id, name, email, reason, suppressed_at }], total, page, limit, total_pages, counts: { unsubscribed, bounced, complained } }` | manage |
+| DELETE | /email-suppressions/:contactId | Let the contact receive email again (they asked to rejoin, or a bad address was fixed). `409` if not suppressed | manage |
+
+**Broadcast object** (`data` on single-broadcast responses, items of `data.data` on the list):
+
+```json
+{
+  "id": "6730…",
+  "name": "November newsletter",
+  "subject": "What's new",
+  "preview_text": null,
+  "html": "<p>…</p>",
+  "design": { "…": "editor JSON, stored as-is" },
+  "template_id": null,
+  "audience": { "all": true },
+  "status": "draft",
+  "scheduled_at": null,
+  "started_at": null,
+  "completed_at": null,
+  "stats": { "total": 0, "sent": 0, "failed": 0, "bounced": 0, "complained": 0, "skipped": 0 },
+  "error": null,
+  "created_by": { "id": "…", "display_name": "Ada" },
+  "sent_by": null,
+  "created_at": "2026-11-12T10:00:00.000Z",
+  "updated_at": "2026-11-12T10:00:00.000Z"
+}
+```
+
+- The ID is **`id`**, never `_id`. `subject`, `html` and `design` are `null` on a fresh draft.
+- `html` and `design` are only included by `GET /broadcasts/:id`, `POST /broadcasts` and `PATCH /broadcasts/:id`. List, send, schedule and cancel responses leave them out.
+- `design` must be a JSON object (max 500,000 chars as JSON); `null` clears it.
+- Every response is wrapped as `{ status: true, message?, data }`; errors are `{ status: false, message, errors? }`. Full schemas are at `/api-docs` (tag *Broadcasts*).
 
 **Audience:** `{ "all": true }`, or filters that must all match: `tags` (any of), `temperature` (`hot`/`warm`/`cold`), `owner_ids`, `company_ids`. `contact_ids` sends to exactly those contacts. Contacts without an email, or who unsubscribed, bounced or complained, are always excluded. Recipients are snapshotted when sending starts; each email address gets one copy.
 
@@ -1120,15 +1153,16 @@ Contacts carry `email_opt_out`, `email_opt_out_reason` (`unsubscribed` / `bounce
 
 | Env var | Required | Description |
 |---------|----------|-------------|
-| `SENDER_API_TOKEN` | yes | Sender.net → Settings → API access tokens |
-| `SENDER_FROM_EMAIL` | yes | Address on a domain verified in Sender.net, e.g. `hello@mail.yourapp.com` |
-| `SENDER_FROM_NAME` | no | Fallback sender name (the organization's name is used when known) |
-| `SENDER_WEBHOOK_SECRET` | yes, for bounces | Random string; the bounce webhook URL must carry it as `?secret=` |
-| `EMAIL_MAX_SEND_RATE` | no | Emails/second (default 5). A `429` from Sender.net pauses sending and re-queues the email |
+| `ENSEND_SECRET` | yes | Ensend project secret (the server won't start without it) |
+| `ENSEND_MAIL` | yes, in production | Verified Ensend sender address. Falls back to a shared Ensend address |
+| `ENSEND_NAME` | no | Fallback sender name (the organization's name is used when known) |
+| `SENDER_WEBHOOK_SECRET` | only for the legacy Sender.net bounce webhook | Random string; the webhook URL must carry it as `?secret=` |
+| `EMAIL_MAX_SEND_RATE` | no | Emails/second (default 5). A `429` from Ensend pauses sending for a minute and re-queues |
 | `EMAIL_DISPATCH_INTERVAL_SECONDS` | no | Queue poll interval (default 30) |
 | `BACKEND_URL` | yes | Public API URL, used to build unsubscribe links |
+| `CLOUDINARY_*` | yes | Also used for `/email-images` (stored under `crm/email-images/<organization id>`) |
 
-Without `SENDER_API_TOKEN` and `SENDER_FROM_EMAIL` the server still starts: triggers keep queueing runs, and send endpoints return `503`. In Sender.net → Settings → Webhooks, add a `bounces/new` webhook pointing at `{BACKEND_URL}/api/webhooks/sender?secret={SENDER_WEBHOOK_SECRET}`.
+**Known gap: Ensend bounces and complaints are not recorded yet.** Ensend's public docs don't describe outbound webhooks (event names, payload or signing), so there is no Ensend webhook endpoint. Until there is, only unsubscribes (and the legacy Sender.net webhook) populate the suppression list.
 
 ---
 

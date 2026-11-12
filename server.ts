@@ -42,6 +42,8 @@ import emailTemplateRoutes from './src/routes/emailTemplateRoutes';
 import emailTriggerRoutes from './src/routes/emailTriggerRoutes';
 import broadcastRoutes from './src/routes/broadcastRoutes';
 import publicEmailRoutes from './src/routes/publicEmailRoutes';
+import emailImageRoutes from './src/routes/emailImageRoutes';
+import emailSuppressionRoutes from './src/routes/emailSuppressionRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { backfillDealValues } from './src/seeds/dealValueBackfill';
 import { startTaskReminderService } from './src/services/taskReminderService';
@@ -187,6 +189,8 @@ app.use('/api/v1/public/email', publicEmailRoutes);
 app.use('/api/v1/email-templates', emailTemplateRoutes);
 app.use('/api/v1/email-triggers', emailTriggerRoutes);
 app.use('/api/v1/broadcasts', broadcastRoutes);
+app.use('/api/v1/email-images', emailImageRoutes);
+app.use('/api/v1/email-suppressions', emailSuppressionRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 /** Unknown routes */

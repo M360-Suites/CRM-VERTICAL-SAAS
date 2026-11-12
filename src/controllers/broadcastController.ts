@@ -9,6 +9,7 @@ import { BroadcastRecipient } from '../models/BroadcastRecipient';
 import { EmailTemplate } from '../models/EmailTemplate';
 import { Contact, type Temperature } from '../models/Contact';
 import { Organization } from '../models/Organization';
+import { User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
 import { optionalEnum, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
 import { buildMergeValues, prepareTemplateHtml, sampleMergeValues } from '../utils/emailTemplateRender';
@@ -18,6 +19,8 @@ import { logger } from '../config/logger';
 import { handleError } from '../utils/errorHandler';
 
 const MAX_HTML_LENGTH = 500_000;
+const MAX_DESIGN_LENGTH = 500_000;
+const MAX_TEST_RECIPIENTS = 5;
 const MAX_AUDIENCE_IDS = 10_000;
 const BROADCAST_STATUSES = ['draft', 'scheduled', 'sending', 'sent', 'cancelled', 'failed'] as const;
 const RECIPIENT_STATUSES = ['queued', 'sending', 'sent', 'failed', 'bounced', 'complained', 'skipped'] as const;
@@ -70,12 +73,15 @@ type BroadcastInput = {
   subject?: string;
   preview_text?: string | null;
   html?: string;
+  design?: unknown;
   template_id?: mongoose.Types.ObjectId | null;
   audience?: IBroadcastAudience;
 };
 
 /**
- * When template_id is given, subject/html/preview_text default to the template's.
+ * When template_id is given, subject/html/preview_text/design default to the template's.
+ * Only name is required to create a draft — subject and html are checked when it's sent,
+ * so the editor can save a draft from the first keystroke.
  */
 const parseBroadcastInput = async (
   organizationId: mongoose.Types.ObjectId,
@@ -90,7 +96,7 @@ const parseBroadcastInput = async (
     if (templateId === null) errors.push('template_id is invalid');
     else if (templateId) {
       const template = await EmailTemplate.findOne({ _id: templateId, organization_id: organizationId })
-        .select('subject html preview_text')
+        .select('subject html preview_text design')
         .lean();
       if (!template) errors.push('template_id must be a template in your organization');
       else {
@@ -98,6 +104,7 @@ const parseBroadcastInput = async (
         input.subject = template.subject;
         input.html = template.html;
         if (template.preview_text) input.preview_text = template.preview_text;
+        if (template.design !== undefined && template.design !== null) input.design = template.design;
       }
     } else input.template_id = null;
   }
@@ -109,7 +116,6 @@ const parseBroadcastInput = async (
   const subject = optionalString(body.subject, 300);
   if (subject === null) errors.push('subject must be at most 300 chars');
   else if (subject) input.subject = subject;
-  if (!partial && !input.subject) errors.push('subject is required (or pass template_id)');
 
   if ('preview_text' in body) {
     const preview = optionalString(body.preview_text, 300);
@@ -122,7 +128,14 @@ const parseBroadcastInput = async (
     else if (body.html.length > MAX_HTML_LENGTH) errors.push(`html cannot exceed ${MAX_HTML_LENGTH} characters`);
     else input.html = body.html;
   }
-  if (!partial && !input.html) errors.push('html is required (or pass template_id)');
+
+  if ('design' in body) {
+    if (body.design !== null && (typeof body.design !== 'object' || Array.isArray(body.design))) {
+      errors.push('design must be a JSON object or null');
+    } else if (body.design !== null && JSON.stringify(body.design).length > MAX_DESIGN_LENGTH) {
+      errors.push(`design cannot exceed ${MAX_DESIGN_LENGTH} characters as JSON`);
+    } else input.design = body.design;
+  }
 
   const audience = parseAudience(body.audience, errors);
   if (audience) input.audience = audience;
@@ -130,12 +143,18 @@ const parseBroadcastInput = async (
   return { input, errors };
 };
 
+/** What a broadcast still needs before it can be sent (or test-sent) */
+const missingContent = (broadcast: { subject?: string | null; html?: string | null }): string | null => {
+  const missing = [!broadcast.subject?.trim() && 'a subject', !broadcast.html?.trim() && 'content'].filter(Boolean);
+  return missing.length ? `Add ${missing.join(' and ')} before sending` : null;
+};
+
 const serializeBroadcast = (broadcast: any, withContent = false) => ({
   id: broadcast._id,
   name: broadcast.name,
-  subject: broadcast.subject,
+  subject: broadcast.subject ?? null,
   preview_text: broadcast.preview_text ?? null,
-  ...(withContent ? { html: broadcast.html } : {}),
+  ...(withContent ? { html: broadcast.html ?? null, design: broadcast.design ?? null } : {}),
   template_id: broadcast.template_id ?? null,
   audience: broadcast.audience ?? { all: true },
   status: broadcast.status,
@@ -180,7 +199,7 @@ export const listBroadcasts = async (req: AuthRequest, res: Response): Promise<v
     const { page, limit, skip } = parsePaging(req.query as Record<string, unknown>, 25, 100);
     const [broadcasts, total] = await Promise.all([
       Broadcast.find(filter)
-        .select('-html')
+        .select('-html -design')
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limit)
@@ -381,13 +400,18 @@ export const sendBroadcast = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const broadcast = await Broadcast.findOne({ _id: id, organization_id: organizationId }).select('status audience').lean();
+    const broadcast = await Broadcast.findOne({ _id: id, organization_id: organizationId }).select('status audience subject html').lean();
     if (!broadcast) {
       res.status(404).json({ status: false, message: 'Broadcast not found' });
       return;
     }
     if (!['draft', 'scheduled'].includes(broadcast.status)) {
       res.status(409).json({ status: false, message: `Broadcast is already ${broadcast.status}` });
+      return;
+    }
+    const contentProblem = missingContent(broadcast);
+    if (contentProblem) {
+      res.status(400).json({ status: false, message: contentProblem });
       return;
     }
     if (!buildAudienceFilter(organizationId, broadcast.audience ?? {})) {
@@ -457,7 +481,47 @@ export const cancelBroadcastHandler = async (req: AuthRequest, res: Response): P
 };
 
 /**
- * POST /broadcasts/:id/test — send the broadcast to the current user
+ * Test recipients: yourself by default, or up to MAX_TEST_RECIPIENTS teammates via
+ * { to: [emails] }. Limited to active users in your organization so the endpoint
+ * can't be used to mail arbitrary addresses from the org's sender identity.
+ */
+const resolveTestRecipients = async (
+  req: AuthRequest,
+  organizationId: mongoose.Types.ObjectId
+): Promise<{ recipients?: Array<{ email: string; name?: string }>; error?: string }> => {
+  const raw = (req.body ?? {}).to;
+  if (raw === undefined || raw === null || (Array.isArray(raw) && raw.length === 0)) {
+    if (!req.user?.email) return { error: 'Your account has no email address' };
+    return { recipients: [{ email: req.user.email, name: req.user.display_name }] };
+  }
+
+  const list = typeof raw === 'string' ? [raw] : raw;
+  if (!Array.isArray(list) || list.some((value) => typeof value !== 'string' || !value.trim())) {
+    return { error: 'to must be an email address or an array of email addresses' };
+  }
+  const emails = [...new Set(list.map((value: string) => value.trim().toLowerCase()))];
+  if (emails.length > MAX_TEST_RECIPIENTS) return { error: `Send a test to at most ${MAX_TEST_RECIPIENTS} people at once` };
+
+  const users = await User.find({
+    organization_id: organizationId,
+    email: { $in: emails },
+    is_active: true,
+    deactivated_at: null
+  })
+    .select('email display_name')
+    .lean();
+
+  const found = new Set(users.map((user) => user.email.toLowerCase()));
+  const unknown = emails.filter((email) => !found.has(email));
+  if (unknown.length) {
+    return { error: `Test emails can only go to active members of your organization: ${unknown.join(', ')}` };
+  }
+
+  return { recipients: users.map((user) => ({ email: user.email, name: user.display_name })) };
+};
+
+/**
+ * POST /broadcasts/:id/test — send the broadcast to yourself, or to teammates with { to: [emails] }
  */
 export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -475,8 +539,19 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
       Broadcast.findOne({ _id: id, organization_id: organizationId }).select('subject html preview_text').lean(),
       Organization.findById(organizationId).select('name').lean()
     ]);
-    if (!broadcast || !req.user?.email) {
+    if (!broadcast) {
       res.status(404).json({ status: false, message: 'Broadcast not found' });
+      return;
+    }
+    const contentProblem = missingContent(broadcast);
+    if (contentProblem) {
+      res.status(400).json({ status: false, message: contentProblem.replace('sending', 'sending a test') });
+      return;
+    }
+
+    const { recipients, error } = await resolveTestRecipients(req, organizationId);
+    if (!recipients) {
+      res.status(400).json({ status: false, message: error });
       return;
     }
 
@@ -484,17 +559,18 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
     // test shows exactly how Ensend fills in the merge tags
     const template = toEnsendTemplate(
       `[Test] ${broadcast.subject}`,
-      prepareTemplateHtml(broadcast, { withUnsubscribe: true })
+      prepareTemplateHtml({ ...broadcast, html: broadcast.html ?? '' }, { withUnsubscribe: true })
     );
-    const values = { ...sampleMergeValues(), ...buildMergeValues({ organization }) };
+    const variables = template.variablesFor({ ...sampleMergeValues(), ...buildMergeValues({ organization }) });
     const ref = await sendBroadcastBatch({
       subject: template.subject,
       html: template.html,
       fromName: organization?.name,
-      recipients: [{ address: req.user.email, name: req.user.display_name, variables: template.variablesFor(values) }]
+      recipients: recipients.map((recipient) => ({ address: recipient.email, name: recipient.name, variables }))
     });
 
-    res.json({ status: true, message: `Test email sent to ${req.user.email}`, data: { ensend_ref: ref } });
+    const sentTo = recipients.map((recipient) => recipient.email);
+    res.json({ status: true, message: `Test email sent to ${sentTo.join(', ')}`, data: { ensend_ref: ref, sent_to: sentTo } });
   } catch (error) {
     handleError(res, error, 'Failed to send test email');
   }

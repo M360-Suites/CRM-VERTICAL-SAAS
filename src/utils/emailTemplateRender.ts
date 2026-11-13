@@ -54,6 +54,31 @@ const escapeHtml = (value: string): string =>
     .replace(/'/g, '&#39;');
 
 /** Flatten a context into the dotted keys templates reference */
+/**
+ * Merge values for a test send: the contact fields come from the person receiving
+ * the test (so "Hi {{contact.first_name}}" greets them, not the sample contact);
+ * company, deal, stage and owner keep their sample values.
+ * With no name on the account, the name tags are left empty so fallbacks show,
+ * just as they would for a real contact without a name.
+ */
+export const testMergeValues = (
+  recipient: { email: string; name?: string | null },
+  organization?: { name?: string } | null
+): Record<string, string> => {
+  const [firstName, ...rest] = (recipient.name ?? '').trim().split(/\s+/).filter(Boolean);
+  const values = sampleMergeValues();
+  for (const key of ['contact.first_name', 'contact.last_name', 'contact.full_name', 'contact.phone', 'contact.role_title']) {
+    delete values[key];
+  }
+  return {
+    ...values,
+    ...buildMergeValues({
+      contact: { first_name: firstName, last_name: rest.join(' ') || undefined, email: recipient.email },
+      organization
+    })
+  };
+};
+
 export const buildMergeValues = (ctx: MergeContext): Record<string, string> => {
   const contact = ctx.contact ?? {};
   const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');

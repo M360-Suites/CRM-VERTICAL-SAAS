@@ -6,9 +6,10 @@ import { Response } from 'express';
 import { AuthRequest } from '../types';
 import { EmailTemplate } from '../models/EmailTemplate';
 import { EmailTrigger } from '../models/EmailTrigger';
+import { Organization } from '../models/Organization';
 import { requireOrganization } from '../utils/tenant';
 import { optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
-import { MERGE_VARIABLES, renderEmail, renderMergeTags, sampleMergeValues } from '../utils/emailTemplateRender';
+import { MERGE_VARIABLES, renderEmail, renderMergeTags, sampleMergeValues, testMergeValues } from '../utils/emailTemplateRender';
 import { isEmailConfigured, sendEmail } from '../utils/ensendMailer';
 import { logger } from '../config/logger';
 import { handleError } from '../utils/errorHandler';
@@ -320,7 +321,8 @@ export const sendTestTemplate = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const rendered = renderEmail(template, {}, sampleMergeValues());
+    const organization = await Organization.findById(organizationId).select('name').lean();
+    const rendered = renderEmail(template, {}, testMergeValues({ email: req.user.email, name: req.user.display_name }, organization));
     await sendEmail({
       to: req.user.email,
       subject: `[Test] ${rendered.subject}`,

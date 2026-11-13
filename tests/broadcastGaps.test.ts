@@ -39,7 +39,7 @@ jest.mock('../src/services/broadcastService', () => ({
 jest.mock('../src/utils/ensendMailer', () => ({
   isEmailConfigured: () => true,
   sendBroadcastBatch,
-  toEnsendTemplate: (subject: string, html: string) => ({ subject, html, variablesFor: () => ({}) })
+  toEnsendTemplate: (subject: string, html: string) => ({ subject, html, variablesFor: (values: Record<string, string>) => values })
 }));
 jest.mock('../src/config', () => ({ __esModule: true, default: { JWT_SECRET: 'test', BACKEND_URL: 'https://api.test' } }));
 jest.mock('../src/config/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() } }));
@@ -150,6 +150,29 @@ describe('test sends', () => {
     const [filter] = userModel.find.mock.calls[0];
     expect(filter).toMatchObject({ organization_id: orgId, email: { $in: ['ada@acme.test'] }, is_active: true, deactivated_at: null });
     expect(sendBroadcastBatch.mock.calls[0][0].recipients.map((r: { address: string }) => r.address)).toEqual(['ada@acme.test']);
+  });
+
+  it('greets each teammate by their own name, not the sample contact', async () => {
+    userModel.find.mockReturnValue(
+      chain([
+        { email: 'grace@acme.test', display_name: 'Grace Hopper' },
+        { email: 'linus@acme.test', display_name: 'Linus' }
+      ])
+    );
+
+    await request(app).post(`/broadcasts/${broadcastId}/test`).send({ to: ['grace@acme.test', 'linus@acme.test'] });
+
+    const [grace, linus] = sendBroadcastBatch.mock.calls[0][0].recipients;
+    expect(grace.variables).toMatchObject({
+      'contact.first_name': 'Grace',
+      'contact.last_name': 'Hopper',
+      'contact.full_name': 'Grace Hopper',
+      'contact.email': 'grace@acme.test',
+      'organization.name': 'Acme'
+    });
+    expect(linus.variables['contact.first_name']).toBe('Linus');
+    expect(linus.variables['contact.last_name']).toBeUndefined();
+    expect(JSON.stringify([grace.variables, linus.variables])).not.toMatch(/Ada|Lovelace/);
   });
 
   it('refuses addresses outside the organization', async () => {

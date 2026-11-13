@@ -12,7 +12,7 @@ import { Organization } from '../models/Organization';
 import { User } from '../models/User';
 import { requireOrganization } from '../utils/tenant';
 import { optionalEnum, optionalObjectId, optionalString, parsePaging } from '../utils/revopsInput';
-import { buildMergeValues, prepareTemplateHtml, sampleMergeValues } from '../utils/emailTemplateRender';
+import { prepareTemplateHtml, testMergeValues } from '../utils/emailTemplateRender';
 import { isEmailConfigured, sendBroadcastBatch, toEnsendTemplate } from '../utils/ensendMailer';
 import { buildAudienceFilter, cancelBroadcast, startBroadcast } from '../services/broadcastService';
 import { logger } from '../config/logger';
@@ -561,12 +561,16 @@ export const sendTestBroadcast = async (req: AuthRequest, res: Response): Promis
       `[Test] ${broadcast.subject}`,
       prepareTemplateHtml({ ...broadcast, html: broadcast.html ?? '' }, { withUnsubscribe: true })
     );
-    const variables = template.variablesFor({ ...sampleMergeValues(), ...buildMergeValues({ organization }) });
     const ref = await sendBroadcastBatch({
       subject: template.subject,
       html: template.html,
       fromName: organization?.name,
-      recipients: recipients.map((recipient) => ({ address: recipient.email, name: recipient.name, variables }))
+      // Each person sees their own name in the contact merge tags
+      recipients: recipients.map((recipient) => ({
+        address: recipient.email,
+        name: recipient.name,
+        variables: template.variablesFor(testMergeValues(recipient, organization))
+      }))
     });
 
     const sentTo = recipients.map((recipient) => recipient.email);

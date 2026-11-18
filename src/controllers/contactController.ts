@@ -495,8 +495,12 @@ export const exportContacts = async (req: AuthRequest, res: Response): Promise<v
 
     const escapeCSV = (value: unknown): string => {
       if (value === null || value === undefined) return '';
-      const str = String(value);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      // String(Date) gives "Wed Nov 18 2026 11:00:00 GMT+0100 (...)", which spreadsheets can't parse
+      let str = value instanceof Date ? value.toISOString() : String(value);
+      // Neutralise spreadsheet formula injection (=, +, -, @, tab, CR at the start of a cell)
+      // (phone/number-shaped values like "+234 801 234 5678" are left alone)
+      if (/^[=+\-@\t\r]/.test(str) && !/^[+-]?[\d\s().-]+$/.test(str)) str = `'${str}`;
+      if (/[",\r\n]/.test(str)) {
         return `"${str.replace(/"/g, '""')}"`;
       }
       return str;
@@ -521,9 +525,10 @@ export const exportContacts = async (req: AuthRequest, res: Response): Promise<v
       ].join(',')
     );
 
-    const csv = [headers.join(','), ...rows].join('\n');
+    // BOM so Excel opens the file as UTF-8 (otherwise names like "José" are garbled)
+    const csv = '﻿' + [headers.join(','), ...rows].join('\r\n');
 
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="contacts.csv"');
     res.send(csv);
   } catch (error) {

@@ -46,6 +46,7 @@ import emailImageRoutes from './src/routes/emailImageRoutes';
 import emailSuppressionRoutes from './src/routes/emailSuppressionRoutes';
 import { seedPipeline } from './src/seeds/pipelineSeed';
 import { backfillDealValues } from './src/seeds/dealValueBackfill';
+import { backfillWonRevenue } from './src/seeds/wonRevenueBackfill';
 import { startTaskReminderService } from './src/services/taskReminderService';
 import { startStaleDealReminderService } from './src/services/staleDealReminderService';
 import { startGoogleAdsSyncService } from './src/services/googleAdsSyncService';
@@ -220,6 +221,7 @@ const startServer = async () => {
     await connectDB();
     await seedPipeline();
     await backfillDealValues();
+    await backfillWonRevenue();
     startTaskReminderService();
     startStaleDealReminderService();
     startGoogleAdsSyncService();

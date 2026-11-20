@@ -265,19 +265,24 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
     }
 
     let stageId: mongoose.Types.ObjectId | null = null;
+    let initialStatus: 'open' | 'won' | 'lost' = 'open';
     if (body.stage_id) {
       if (!isValidObjectId(body.stage_id)) {
         res.status(400).json({ status: false, message: 'Invalid stage_id' });
         return;
       }
 
-      const stageExists = await PipelineStage.exists({ _id: body.stage_id, organization_id: organizationId });
-      if (!stageExists) {
+      const stage = await PipelineStage.findOne({ _id: body.stage_id, organization_id: organizationId })
+        .select('is_won is_lost')
+        .lean();
+      if (!stage) {
         res.status(404).json({ status: false, message: 'Stage not found' });
         return;
       }
 
       stageId = toObjectId(body.stage_id);
+      // A deal created straight into a Won/Lost stage is closed, not open
+      initialStatus = stage.is_won ? 'won' : stage.is_lost ? 'lost' : 'open';
     } else {
       stageId = await getFirstStageId(organizationId);
       if (!stageId) {
@@ -318,6 +323,7 @@ export const createPipelineDeal = async (req: AuthRequest, res: Response): Promi
       source: body.source,
       industry: body.industry,
       stage_id: stageId,
+      status: initialStatus,
       company_id: body.company_id ? toObjectId(body.company_id) : undefined,
       owner_id: req.user?.id ? toObjectId(req.user.id) : undefined,
       organization_id: organizationId,
@@ -344,7 +350,7 @@ export const updatePipelineDeal = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const existingDeal = await Deal.findOne({ _id: dealId, organization_id: organizationId }).select('owner_id').lean();
+    const existingDeal = await Deal.findOne({ _id: dealId, organization_id: organizationId }).select('owner_id stage_id').lean();
     if (!existingDeal) {
       res.status(404).json({ message: 'Deal not found' });
       return;

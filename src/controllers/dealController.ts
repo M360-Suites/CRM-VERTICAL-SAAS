@@ -217,13 +217,17 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const [stageExists, companyExists, contactExists] = await Promise.all([
-      stage_id ? PipelineStage.exists({ _id: stage_id, organization_id: organizationId }) : Promise.resolve(true),
+    const [stage, companyExists, contact] = await Promise.all([
+      stage_id
+        ? PipelineStage.findOne({ _id: stage_id, organization_id: organizationId }).select('is_won is_lost').lean()
+        : Promise.resolve(null),
       company_id ? Company.exists({ _id: company_id, organization_id: organizationId }) : Promise.resolve(true),
-      contact_id ? Contact.exists({ _id: contact_id, organization_id: organizationId }) : Promise.resolve(true)
+      contact_id
+        ? Contact.findOne({ _id: contact_id, organization_id: organizationId }).select('company_id').lean()
+        : Promise.resolve(null)
     ]);
 
-    if (!stageExists) {
+    if (stage_id && !stage) {
       res.status(404).json({
         status: false,
         message: 'Stage not found'
@@ -239,13 +243,16 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    if (!contactExists) {
+    if (contact_id && !contact) {
       res.status(404).json({
         status: false,
         message: 'Contact not found'
       });
       return;
     }
+
+    // A deal attached only to a contact still belongs to that contact's company
+    const resolvedCompanyId = company_id || (contact?.company_id ? String(contact.company_id) : undefined);
 
     if (!isTruthyFlag(allow_duplicate)) {
       const duplicate = await findDuplicateDeal(organizationId, { title, contact_id, company_id });
@@ -259,9 +266,12 @@ export const createDeal = async (req: AuthRequest, res: Response): Promise<void>
       expected_close_date: expected_close_date ? new Date(expected_close_date) : undefined,
       stage_id: stage_id ? new mongoose.Types.ObjectId(stage_id) : undefined,
       stage_changed_at: stage_id ? new Date() : undefined,
+      // Creating a deal straight into a Won/Lost stage must close it, or it
+      // never counts toward won revenue
+      status: stage?.is_won ? 'won' : stage?.is_lost ? 'lost' : 'open',
       source,
       industry,
-      company_id: company_id ? new mongoose.Types.ObjectId(company_id) : undefined,
+      company_id: resolvedCompanyId ? new mongoose.Types.ObjectId(resolvedCompanyId) : undefined,
       contact_id: contact_id ? new mongoose.Types.ObjectId(contact_id) : undefined,
       owner_id: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
       organization_id: organizationId
@@ -387,6 +397,16 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
         id
       );
       if (duplicate) return duplicateDealResponse(res, duplicate);
+    }
+
+    // Linking a contact to a deal with no company attaches the contact's company,
+    // so the deal shows up in that company's deals and revenue
+    const companyAfterUpdate = 'company_id' in fields ? fields.company_id : existingDeal.company_id;
+    if (updateData.contact_id && !companyAfterUpdate) {
+      const linkedContact = await Contact.findOne({ _id: updateData.contact_id, organization_id: organizationId })
+        .select('company_id')
+        .lean();
+      if (linkedContact?.company_id) updateObj.company_id = linkedContact.company_id;
     }
 
     let stageChangeInfo: { stage_id: string; stage_name: string } | null = null;

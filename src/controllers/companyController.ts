@@ -7,6 +7,7 @@ import { AuthRequest, PaginatedResponse } from '../types';
 import { dealScope, requireOrganization } from '../utils/tenant';
 import { isValidEmail, isValidPhone, MAX_IMPORT_ROWS, parseImportCsv } from '../utils/csvImport';
 import { handleError } from '../utils/errorHandler';
+import { syncCompanyContactPerson } from '../services/companyContactSync';
 
 interface CompanyQuery {
   page?: number;
@@ -231,6 +232,7 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
     });
 
     await company.save();
+    await syncCompanyContactPerson(company);
 
     const populatedCompany = await Company.findOne({ _id: company._id, organization_id: organizationId })
       .populate('owner_id', 'email display_name');
@@ -323,6 +325,9 @@ export const bulkImportCompanies = async (req: AuthRequest, res: Response): Prom
     if (validCompanies.length > 0) {
       const result = await Company.insertMany(validCompanies);
       imported = result.length;
+      for (const created of result) {
+        await syncCompanyContactPerson(created as Parameters<typeof syncCompanyContactPerson>[0]);
+      }
     }
 
     res.json({
@@ -380,6 +385,10 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
         message: 'Company not found'
       });
       return;
+    }
+
+    if (updateData.contact_person) {
+      await syncCompanyContactPerson(company);
     }
 
     const [companyWithStats] = await attachCompanyStats([company.toObject ? company.toObject() : company], organizationId);

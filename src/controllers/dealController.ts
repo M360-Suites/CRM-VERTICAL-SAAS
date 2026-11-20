@@ -422,11 +422,7 @@ export const updateDeal = async (req: AuthRequest, res: Response): Promise<void>
       }
 
       if (existingDeal.stage_id) {
-        const currentStage = await PipelineStage.findById(existingDeal.stage_id).select('is_won is_lost').lean();
-        if (currentStage?.is_won) {
-          res.status(400).json({ message: 'Cannot move a deal from a Won stage' });
-          return;
-        }
+        const currentStage = await PipelineStage.findById(existingDeal.stage_id).select('is_lost').lean();
         if (currentStage?.is_lost) {
           res.status(400).json({ message: 'Cannot move a deal from a Lost stage' });
           return;
@@ -699,11 +695,7 @@ export const updateDealStage = async (req: AuthRequest, res: Response): Promise<
     }
 
     if (existingDeal.stage_id) {
-      const currentStage = await PipelineStage.findById(existingDeal.stage_id).select('is_won is_lost').lean();
-      if (currentStage?.is_won) {
-        res.status(400).json({ message: 'Cannot move a deal from a Won stage' });
-        return;
-      }
+      const currentStage = await PipelineStage.findById(existingDeal.stage_id).select('is_lost').lean();
       if (currentStage?.is_lost) {
         res.status(400).json({ message: 'Cannot move a deal from a Lost stage' });
         return;

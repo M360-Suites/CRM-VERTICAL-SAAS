@@ -27,6 +27,7 @@ import { SocialAccount } from '../models/SocialAccount';
 import { EmailMessage } from '../models/EmailMessage';
 import { PasswordResetOtp } from '../models/PasswordResetOtp';
 import { EmailVerificationOtp } from '../models/EmailVerificationOtp';
+import { isValidEmail } from '../utils/csvImport';
 
 /** Request body for creating user */
 interface CreateUserBody {
@@ -77,6 +78,61 @@ const getInviteAcceptUrl = (token: string, displayName?: string): string => {
 
   return `${getFrontendUrl(process.env.FRONTEND_INVITE_URL)}/accept-invite?${params.toString()}`;
 };
+
+/** Explain why an email can't be added to this organization, or null if it's free */
+const existingAccountMessage = async (
+  email: string,
+  organizationId: mongoose.Types.ObjectId
+): Promise<string | null> => {
+  const existing = await User.findOne({ email }).select('organization_id is_active deactivated_at').lean();
+  if (!existing) return null;
+  if (existing.organization_id?.toString() !== organizationId.toString()) return 'Email already registered';
+  if (existing.deactivated_at || !existing.is_active) {
+    return `${email} already has a deactivated account in your organization. Reactivate them instead of inviting them again.`;
+  }
+  return `${email} is already a member of your organization`;
+};
+
+/**
+ * Stop an admin from locking the organization out: nobody can deactivate or
+ * demote themselves, and the organization owner can't be deactivated or demoted.
+ * Since the caller is an active admin who isn't the target, an admin always remains.
+ */
+const assertCanRemoveAccess = async (
+  req: AuthRequest,
+  organizationId: mongoose.Types.ObjectId,
+  targetId: string,
+  change: { deactivate?: boolean; role?: UserRole }
+): Promise<void> => {
+  const removesAccess = change.deactivate === true || (change.role !== undefined && change.role !== 'admin');
+  if (!removesAccess) return;
+
+  if (targetId === req.user?.id) {
+    throw new AppError(
+      400,
+      change.deactivate
+        ? 'You cannot deactivate your own account. Ask another admin in your organization to do it.'
+        : 'You cannot change your own role. Ask another admin in your organization to do it.',
+      'BAD_REQUEST'
+    );
+  }
+
+  const organization = await Organization.findById(organizationId).select('owner_id').lean();
+  if (organization?.owner_id && organization.owner_id.toString() === targetId) {
+    throw new AppError(
+      409,
+      'This user is the owner of the organization and cannot be deactivated or moved off the admin role. Transfer ownership first.',
+      'CONFLICT'
+    );
+  }
+};
+
+/** Pending invitations sent by someone who has lost admin access stop working */
+const revokeInvitationsSentBy = (organizationId: mongoose.Types.ObjectId, userId: string) =>
+  UserInvitation.updateMany(
+    { organization_id: organizationId, invited_by: new mongoose.Types.ObjectId(userId), accepted_at: null, revoked_at: null },
+    { $set: { revoked_at: new Date() } }
+  );
 
 /**
  * List all users
@@ -162,23 +218,32 @@ export const getUserById = async (req: AuthRequest, res: Response): Promise<void
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { email, password, display_name, role } = req.body as CreateUserBody;
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedDisplayName = display_name?.trim();
+
+    if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+      res.status(400).json({ status: false, message: 'A valid email address is required' });
+      return;
+    }
+
+    if (!normalizedDisplayName) {
+      res.status(400).json({ status: false, message: 'display_name cannot be empty' });
+      return;
+    }
 
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      res.status(400).json({
-        status: false,
-        message: 'Email already registered'
-      });
+    const existingMessage = await existingAccountMessage(normalizedEmail, organizationId);
+    if (existingMessage) {
+      res.status(400).json({ status: false, message: existingMessage });
       return;
     }
 
     const user = new User({
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       password,
-      display_name,
+      display_name: normalizedDisplayName,
       organization_id: organizationId,
       role: role || 'viewer'
     });
@@ -248,15 +313,22 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    await assertCanRemoveAccess(req, organizationId, id, { deactivate: is_active === false, role });
+
     const user = await User.findOneAndUpdate(
       { _id: id, organization_id: organizationId },
-      { $set: update },
+      // Deactivating also ends every session, so old sessions don't come back on reactivation
+      { $set: update, ...(is_active === false ? { $inc: { token_version: 1 } } : {}) },
       { new: true, runValidators: true }
     ).select('-password');
 
     if (!user) {
       res.status(404).json({ status: false, message: 'User not found' });
       return;
+    }
+
+    if (is_active === false || (role !== undefined && role !== 'admin')) {
+      await revokeInvitationsSentBy(organizationId, id);
     }
 
     res.json({
@@ -279,6 +351,11 @@ export const inviteUser = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    if (!isValidEmail(normalizedEmail)) {
+      res.status(400).json({ status: false, message: `"${normalizedEmail}" is not a valid email address` });
+      return;
+    }
+
     if (!validRoles.includes(role)) {
       res.status(400).json({ status: false, message: 'Invalid role' });
       return;
@@ -292,21 +369,11 @@ export const inviteUser = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const existingUser = await User.findOne({ email: normalizedEmail });
-    if (existingUser) {
-      res.status(400).json({ status: false, message: 'Email already registered' });
+    const existingMessage = await existingAccountMessage(normalizedEmail, organizationId);
+    if (existingMessage) {
+      res.status(400).json({ status: false, message: existingMessage });
       return;
     }
-
-    await UserInvitation.updateMany(
-      {
-        email: normalizedEmail,
-        organization_id: organizationId,
-        accepted_at: null,
-        revoked_at: null
-      },
-      { $set: { revoked_at: new Date() } }
-    );
 
     const rawToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -323,13 +390,36 @@ export const inviteUser = async (req: AuthRequest, res: Response): Promise<void>
 
     const organization = await Organization.findById(organizationId).select('name').lean();
 
-    await sendUserInvitationEmail(normalizedEmail, {
-      organizationName: organization?.name || 'your organization',
-      inviterName: req.user.display_name || req.user.email,
-      inviteUrl: getInviteAcceptUrl(rawToken, invitation.display_name),
-      role,
-      expiresAt
-    });
+    try {
+      await sendUserInvitationEmail(normalizedEmail, {
+        organizationName: organization?.name || 'your organization',
+        inviterName: req.user.display_name || req.user.email,
+        inviteUrl: getInviteAcceptUrl(rawToken, invitation.display_name),
+        role,
+        expiresAt
+      });
+    } catch (emailError) {
+      // Undo so no unsent invitation shows as pending; earlier invitations for this email keep working
+      await UserInvitation.deleteOne({ _id: invitation._id });
+      logger.error({ err: emailError, email: normalizedEmail }, 'Failed to send invitation email');
+      throw new AppError(
+        502,
+        `We couldn't send the invitation email to ${normalizedEmail}. Check the address and try again.`,
+        'SERVICE_UNAVAILABLE'
+      );
+    }
+
+    // Only once the new link is on its way do older links for this email stop working
+    await UserInvitation.updateMany(
+      {
+        _id: { $ne: invitation._id },
+        email: normalizedEmail,
+        organization_id: organizationId,
+        accepted_at: null,
+        revoked_at: null
+      },
+      { $set: { revoked_at: new Date() } }
+    );
 
     res.status(201).json({
       status: true,
@@ -487,9 +577,11 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
+    await assertCanRemoveAccess(req, organizationId, id, { deactivate: true });
+
     const user = await User.findOneAndUpdate(
       { _id: id, organization_id: organizationId },
-      { is_active: false, deactivated_at: new Date() },
+      { $set: { is_active: false, deactivated_at: new Date() }, $inc: { token_version: 1 } },
       { new: true }
     );
 
@@ -500,6 +592,8 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
       });
       return;
     }
+
+    await revokeInvitationsSentBy(organizationId, id);
 
     res.json({ status: true, message: 'User deactivated successfully' });
   } catch (error) {
@@ -563,6 +657,8 @@ export const assignRole = async (req: AuthRequest, res: Response): Promise<void>
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
+    await assertCanRemoveAccess(req, organizationId, id, { role });
+
     const user = await User.findOneAndUpdate(
       { _id: id, organization_id: organizationId },
       { role },
@@ -576,6 +672,8 @@ export const assignRole = async (req: AuthRequest, res: Response): Promise<void>
       });
       return;
     }
+
+    if (role !== 'admin') await revokeInvitationsSentBy(organizationId, id);
 
     res.json({
       status: true,
@@ -598,6 +696,8 @@ export const removeRole = async (req: AuthRequest, res: Response): Promise<void>
     const organizationId = requireOrganization(req, res);
     if (!organizationId) return;
 
+    await assertCanRemoveAccess(req, organizationId, id, { role: 'viewer' });
+
     const user = await User.findOneAndUpdate(
       { _id: id, organization_id: organizationId },
       { role: 'viewer' },
@@ -611,6 +711,8 @@ export const removeRole = async (req: AuthRequest, res: Response): Promise<void>
       });
       return;
     }
+
+    await revokeInvitationsSentBy(organizationId, id);
 
     res.json({ status: true, message: 'Role removed successfully' });
   } catch (error) {
@@ -709,8 +811,11 @@ export const deleteStaff = async (req: AuthRequest, res: Response): Promise<void
       SocialAccount.deleteMany({ userId: staffObjectId }),
       EmailMessage.deleteMany({ user_id: staffObjectId }),
       PasswordResetOtp.deleteMany({ user_id: staffObjectId }),
-      EmailVerificationOtp.deleteMany({ user_id: staffObjectId })
+      EmailVerificationOtp.deleteMany({ user_id: staffObjectId }),
+      revokeInvitationsSentBy(organizationId, id)
     ]);
+
+    // Deleting the user comes last, so if anything above fails the whole delete can simply be retried
 
     await User.deleteOne({ _id: staffObjectId, organization_id: organizationId });
 
@@ -731,6 +836,6 @@ export const deleteStaff = async (req: AuthRequest, res: Response): Promise<void
       }
     });
   } catch (error) {
-    handleError(res, error, 'Failed to delete staff member');
+    handleError(res, error, 'Failed to delete staff member. The account was not removed, so it is safe to try again.');
   }
 };

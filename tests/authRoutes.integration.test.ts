@@ -233,6 +233,7 @@ describe('auth HTTP API', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ status: true, message: 'Password reset successfully' });
     expect(user.password).toBe('NewPassword1!');
+    expect((user as { token_version?: number }).token_version).toBe(1);
     expect(user.save).toHaveBeenCalled();
     expect(otpRecord.save).toHaveBeenCalled();
   });

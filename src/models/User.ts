@@ -28,6 +28,8 @@ export interface IUser extends Document {
   is_active: boolean;
   /** Set when an admin deactivates the account; is_active alone also means "email not verified yet" */
   deactivated_at?: Date | null;
+  /** Bumped to sign out every existing session (password reset, deactivation) */
+  token_version: number;
   google_access_token?: string;
   google_refresh_token?: string;
   gmail_sync_enabled: boolean;
@@ -55,6 +57,7 @@ const UserSchema = new Schema<IUser>(
     organization_id: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
     is_active: { type: Boolean, default: true },
     deactivated_at: { type: Date, default: null },
+    token_version: { type: Number, default: 0 },
     google_access_token: { type: String },
     google_refresh_token: { type: String },
     gmail_sync_enabled: { type: Boolean, default: false },

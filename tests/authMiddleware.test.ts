@@ -32,6 +32,43 @@ describe('real authentication and authorization middleware', () => {
     expect(response.body.message).toMatch(/permission/i);
   });
 
+  it('rejects a session that was signed out by a password reset', async () => {
+    verifyToken.mockReturnValue({ id: 'user-1', tv: 0 });
+    findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'user-1', role: 'admin', is_active: true, token_version: 1 }) });
+
+    const response = await request(app).get('/exports').set('Authorization', 'Bearer old-token');
+
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('SESSION_REVOKED');
+  });
+
+  it('accepts a session issued at the current token version', async () => {
+    verifyToken.mockReturnValue({ id: 'user-1', tv: 1 });
+    findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'user-1', role: 'admin', is_active: true, token_version: 1 }) });
+
+    const response = await request(app).get('/exports').set('Authorization', 'Bearer new-token');
+
+    expect(response.status).toBe(200);
+  });
+
+  it('tells an unverified sign-up to verify their email, not that they were deactivated', async () => {
+    findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'user-1', role: 'admin', is_active: false, deactivated_at: null }) });
+
+    const response = await request(app).get('/exports').set('Authorization', 'Bearer valid-token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('EMAIL_NOT_VERIFIED');
+  });
+
+  it('still reports a deactivated account as deactivated', async () => {
+    findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'user-1', role: 'admin', is_active: false, deactivated_at: new Date() }) });
+
+    const response = await request(app).get('/exports').set('Authorization', 'Bearer valid-token');
+
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('ACCOUNT_DEACTIVATED');
+  });
+
   it('rejects a token when its organization has been deactivated', async () => {
     findOrganization.mockReturnValue({ select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ is_active: false }) }) });
 

@@ -100,7 +100,9 @@ router.post('/invitations/accept', authRateLimit, validateBody({
  *       201:
  *         description: Invitation sent successfully
  *       400:
- *         description: Invalid input or email already registered
+ *         description: Invalid email, or the email already has an account (deactivated members must be reactivated instead)
+ *       502:
+ *         description: The invitation email could not be sent; no invitation was created and earlier invitations still work
  */
 router.get('/invitations', authenticate, authorize('admin'), listInvitations);
 router.post('/invitations', authenticate, authorize('admin'), validateBody({
@@ -216,6 +218,7 @@ router.get('/:id', authenticate, authorize('admin'), getUserById);
  *                 type: string
  *               password:
  *                 type: string
+ *                 minLength: 8
  *               display_name:
  *                 type: string
  *               role:
@@ -227,7 +230,12 @@ router.get('/:id', authenticate, authorize('admin'), getUserById);
  *       400:
  *         description: Invalid input
  */
-router.post('/', authenticate, authorize('admin'), createUser);
+router.post('/', authenticate, authorize('admin'), validateBody({
+  email: { required: true, type: 'string', maxLength: 254 },
+  password: { required: true, type: 'string', minLength: 8, maxLength: 128 },
+  display_name: { required: true, type: 'string', maxLength: 120 },
+  role: { type: 'string', enum: ['admin', 'sales_manager', 'sales_rep', 'viewer'] }
+}), createUser);
 
 /**
  * @swagger
@@ -266,6 +274,10 @@ router.post('/', authenticate, authorize('admin'), createUser);
  *       200:
  *         description: User updated successfully
  *       400:
+ *         description: You cannot deactivate yourself or change your own role
+ *       409:
+ *         description: The organization owner cannot be deactivated or moved off the admin role
+ *       400:
  *         description: Invalid input
  *       404:
  *         description: User not found
@@ -296,6 +308,10 @@ router.patch('/:id', authenticate, authorize('admin'), validateBody({
  *     responses:
  *       200:
  *         description: User deactivated successfully
+ *       400:
+ *         description: You cannot deactivate yourself or change your own role
+ *       409:
+ *         description: The organization owner cannot be deactivated or moved off the admin role
  *       404:
  *         description: User not found
  */
@@ -391,6 +407,10 @@ router.get('/:id/role', authenticate, authorize('admin'), getUserRole);
  *     responses:
  *       200:
  *         description: Role assigned successfully
+ *       400:
+ *         description: You cannot deactivate yourself or change your own role
+ *       409:
+ *         description: The organization owner cannot be deactivated or moved off the admin role
  */
 router.post('/:id/role', authenticate, authorize('admin'), assignRole);
 
@@ -413,6 +433,10 @@ router.post('/:id/role', authenticate, authorize('admin'), assignRole);
  *     responses:
  *       200:
  *         description: Role removed successfully
+ *       400:
+ *         description: You cannot deactivate yourself or change your own role
+ *       409:
+ *         description: The organization owner cannot be deactivated or moved off the admin role
  */
 router.delete('/:id/role', authenticate, authorize('admin'), removeRole);
 

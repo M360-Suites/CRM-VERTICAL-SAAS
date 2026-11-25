@@ -24,6 +24,7 @@ import { SocialAccount } from '../src/models/SocialAccount';
 import { EmailMessage } from '../src/models/EmailMessage';
 import { PasswordResetOtp } from '../src/models/PasswordResetOtp';
 import { EmailVerificationOtp } from '../src/models/EmailVerificationOtp';
+import { UserInvitation } from '../src/models/UserInvitation';
 
 const app = express(); app.use(express.json()); app.use('/users', userRoutes);
 const authenticated = (test: request.Test) => test.set('Authorization', 'Bearer test-token');
@@ -60,7 +61,7 @@ describe('DELETE /users/:id/permanent', () => {
 
   beforeEach(() => {
     const result = { modifiedCount: 2 } as never;
-    updates = [Deal, Contact, Company, Task, CRMFile, Folder, PipelineStage, RoutingRule].map((model) =>
+    updates = [Deal, Contact, Company, Task, CRMFile, Folder, PipelineStage, RoutingRule, UserInvitation].map((model) =>
       jest.spyOn(model as never as typeof Deal, 'updateMany').mockResolvedValue(result)
     );
     [Notification, SocialAccount, EmailMessage, PasswordResetOtp, EmailVerificationOtp].forEach((model) =>

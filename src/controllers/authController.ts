@@ -299,7 +299,8 @@ export const verifyEmail = async (req: AuthRequest, res: Response): Promise<void
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-      organization_id: organizationId.toString()
+      organization_id: organizationId.toString(),
+      tv: user.token_version ?? 0
     });
 
     setAuthCookies(res, token, user);
@@ -430,7 +431,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-      organization_id: organizationId.toString()
+      organization_id: organizationId.toString(),
+      tv: user.token_version ?? 0
     });
 
     setAuthCookies(res, token, user);
@@ -645,7 +647,8 @@ export const googleCallback = async (req: AuthRequest, res: Response): Promise<v
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-      organization_id: organizationId.toString()
+      organization_id: organizationId.toString(),
+      tv: user.token_version ?? 0
     });
 
     setAuthCookies(res, token, user);
@@ -850,6 +853,8 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     user.password = newPassword;
+    // Sign out every existing session, so a stolen session can't outlive the reset
+    user.token_version = (user.token_version ?? 0) + 1;
     await user.save();
 
     otpRecord.used_at = new Date();

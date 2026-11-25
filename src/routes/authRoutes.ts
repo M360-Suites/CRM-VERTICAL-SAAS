@@ -370,7 +370,7 @@ router.post('/verify-otp', authRateLimit, validateBody({
  *                 minLength: 8
  *     responses:
  *       200:
- *         description: Password reset successfully
+ *         description: Password reset successfully. Every existing session for the account is signed out.
  *         content:
  *           application/json:
  *             schema:

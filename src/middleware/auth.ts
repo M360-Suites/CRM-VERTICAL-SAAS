@@ -60,12 +60,30 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       return;
     }
 
-    if (!user.is_active) {
+    if ((decoded.tv ?? 0) !== (user.token_version ?? 0)) {
       res.status(401).json({
         status: false,
-        message: 'Your account has been deactivated. Contact your organization admin to regain access.',
-        code: 'ACCOUNT_DEACTIVATED'
+        message: 'Your session has ended because your password or account access changed. Please log in again.',
+        code: 'SESSION_REVOKED'
       });
+      return;
+    }
+
+    if (!user.is_active) {
+      // is_active is false both for deactivated accounts and for sign-ups that haven't verified their email yet
+      if (user.deactivated_at) {
+        res.status(401).json({
+          status: false,
+          message: 'Your account has been deactivated. Contact your organization admin to regain access.',
+          code: 'ACCOUNT_DEACTIVATED'
+        });
+      } else {
+        res.status(403).json({
+          status: false,
+          message: 'Please verify your email before continuing. Check your inbox for the verification code.',
+          code: 'EMAIL_NOT_VERIFIED'
+        });
+      }
       return;
     }
 

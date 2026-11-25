@@ -18,6 +18,8 @@ export interface JWTPayload {
   email: string;
   role: string;
   organization_id: string;
+  /** User.token_version at sign-in; a mismatch means the session was revoked */
+  tv?: number;
 }
 
 /**

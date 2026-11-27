@@ -170,9 +170,18 @@ router.post('/', authorize('admin', 'sales_manager', 'sales_rep'), createDeal);
  *               file:
  *                 type: string
  *                 format: binary
+ *               create_contacts:
+ *                 type: boolean
+ *                 default: false
+ *                 description: |
+ *                   Also accepted as a query parameter. When true, a row whose email/phone matches no existing contact
+ *                   creates one (name from contact_name/full_name or first_name + last_name, falling back to the email's
+ *                   local part) and links the deal to it. Extra columns recognised in this mode: contact_name, full_name,
+ *                   first_name, last_name, phone (aliases phone_number, mobile, contact_phone). Existing contacts are matched
+ *                   by email then phone; repeated rows share one new contact. Invalid emails/phones fail the row.
  *     responses:
  *       200:
- *         description: Deals imported. Returns imported count, failed count, custom_columns and per-row errors.
+ *         description: Deals imported. Returns imported count, failed count, custom_columns and per-row errors (plus contacts_created when create_contacts is true).
  *       400:
  *         description: Missing or empty CSV file
  */

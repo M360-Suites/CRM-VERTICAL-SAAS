@@ -6,11 +6,27 @@
  */
 import mongoose, { Document, Schema } from 'mongoose';
 
+/** Categories for the Email Templates "Sort by category" sidebar — value stored, label shown */
+export const EMAIL_TEMPLATE_CATEGORIES = [
+  { value: 'sales', label: 'Sales templates' },
+  { value: 'welcome', label: 'Welcome email' },
+  { value: 'promo', label: 'Promo templates' },
+  { value: 'newsletter', label: 'Newsletter' },
+  { value: 'new_sales_alert', label: 'New sales Alert' },
+  { value: 'price_discount', label: 'Price discount' }
+] as const;
+
+export type EmailTemplateCategory = (typeof EMAIL_TEMPLATE_CATEGORIES)[number]['value'];
+
+export const EMAIL_TEMPLATE_CATEGORY_VALUES: readonly EmailTemplateCategory[] = EMAIL_TEMPLATE_CATEGORIES.map((category) => category.value);
+
 export interface IEmailTemplate extends Document {
   organization_id: mongoose.Types.ObjectId;
   name: string;
   subject: string;
   preview_text?: string;
+  /** Optional; templates created before categories existed have none */
+  category?: EmailTemplateCategory;
   html: string;
   design?: unknown;
   created_by?: mongoose.Types.ObjectId;
@@ -25,6 +41,7 @@ const EmailTemplateSchema = new Schema<IEmailTemplate>(
     name: { type: String, required: true, trim: true, maxlength: 200 },
     subject: { type: String, required: true, trim: true, maxlength: 300 },
     preview_text: { type: String, trim: true, maxlength: 300 },
+    category: { type: String, enum: EMAIL_TEMPLATE_CATEGORY_VALUES },
     html: { type: String, required: true },
     design: { type: Schema.Types.Mixed },
     created_by: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -36,5 +53,6 @@ const EmailTemplateSchema = new Schema<IEmailTemplate>(
 );
 
 EmailTemplateSchema.index({ organization_id: 1, updated_at: -1 });
+EmailTemplateSchema.index({ organization_id: 1, category: 1, updated_at: -1 });
 
 export const EmailTemplate = mongoose.model<IEmailTemplate>('EmailTemplate', EmailTemplateSchema);

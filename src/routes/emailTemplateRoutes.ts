@@ -5,6 +5,7 @@ import {
   deleteTemplate,
   duplicateTemplate,
   getTemplate,
+  listCategories,
   listMergeVariables,
   listTemplates,
   previewTemplate,
@@ -31,11 +32,15 @@ router.use(authenticate);
  * /email-templates:
  *   get:
  *     tags: [Email Templates]
- *     summary: List templates (without html/design), newest first
+ *     summary: List templates newest first — each item includes design (for card previews) but not html
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - { in: query, name: search, schema: { type: string } }
+ *       - in: query
+ *         name: category
+ *         description: Comma-separated categories; returns templates in any of them. Unknown values return 400.
+ *         schema: { type: string, example: "welcome,newsletter" }
  *       - { in: query, name: page, schema: { type: integer } }
  *       - { in: query, name: limit, schema: { type: integer, maximum: 200 } }
  *   post:
@@ -54,6 +59,11 @@ router.use(authenticate);
  *               name: { type: string }
  *               subject: { type: string, example: "Thanks for your interest, {{contact.first_name | there}}" }
  *               preview_text: { type: string }
+ *               category:
+ *                 type: string
+ *                 nullable: true
+ *                 enum: [sales, welcome, promo, newsletter, new_sales_alert, price_discount]
+ *                 description: Optional. Send null on PATCH to clear it.
  *               html: { type: string, description: "Rendered canvas HTML. Merge tags like {{contact.first_name}} are filled at send time." }
  *               design: { type: object, description: The canvas editor's own JSON, stored as-is so the editor can reload it }
  */
@@ -70,6 +80,17 @@ router.post('/', MANAGE, createTemplate);
  *       - bearerAuth: []
  */
 router.get('/variables', listMergeVariables);
+
+/**
+ * @swagger
+ * /email-templates/categories:
+ *   get:
+ *     tags: [Email Templates]
+ *     summary: "Categories with template counts for the sidebar: { categories: [{ value, label, count }], uncategorized }"
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/categories', listCategories);
 
 /**
  * @swagger

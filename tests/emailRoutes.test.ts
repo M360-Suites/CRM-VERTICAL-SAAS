@@ -6,7 +6,7 @@ jest.mock('../src/middleware/auth', () => mockAuthentication());
 jest.mock('../src/controllers/emailTemplateController', () => {
   const { mockControllerStub: stub } = jest.requireActual('./helpers/featureRouteHarness');
   return Object.fromEntries(
-    ['listTemplates', 'createTemplate', 'getTemplate', 'updateTemplate', 'deleteTemplate', 'duplicateTemplate', 'listMergeVariables', 'previewTemplate', 'sendTestTemplate'].map(
+    ['listTemplates', 'createTemplate', 'getTemplate', 'updateTemplate', 'deleteTemplate', 'duplicateTemplate', 'listCategories', 'listMergeVariables', 'previewTemplate', 'sendTestTemplate'].map(
       (name) => [name, stub(name)]
     )
   );
@@ -56,6 +56,7 @@ describe('email module routes', () => {
   it('routes static paths before :id', async () => {
     expect((await authenticated(request(templates).get('/email-templates/variables'))).body.handler).toBe('listMergeVariables');
     expect((await authenticated(request(templates).post('/email-templates/preview'))).body.handler).toBe('previewTemplate');
+    expect((await authenticated(request(templates).get('/email-templates/categories'))).body.handler).toBe('listCategories');
     expect((await authenticated(request(triggers).get('/email-triggers/events'))).body.handler).toBe('listTriggerEvents');
     expect((await authenticated(request(triggers).get('/email-triggers/runs'))).body.handler).toBe('listTriggerRuns');
     expect((await authenticated(request(broadcasts).post('/broadcasts/audience/preview'))).body.handler).toBe('previewAudience');

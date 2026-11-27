@@ -321,6 +321,56 @@ describe('POST /deals/bulk-import', () => {
     ]);
   });
 
+  it('does not create contacts unless create_contacts is set', async () => {
+    const response = await upload('/deals/bulk-import', 'title,email,phone\nNew biz,new@x.io,5550100\n');
+    expect(Contact.insertMany).not.toHaveBeenCalled();
+    expect(response.body.data.contacts_created).toBeUndefined();
+    const [docs] = (Deal.insertMany as jest.Mock).mock.calls[0];
+    expect(docs[0].custom_fields).toEqual({ contact_email: 'new@x.io', phone: '5550100' });
+  });
+
+  it('creates missing contacts when create_contacts is set, reusing existing and repeated ones', async () => {
+    (Contact.find as jest.Mock).mockReturnValue(query([{ _id: CONTACT_ID, email: 'ada@example.com', phone: '5550199' }]));
+
+    const response = await request(app)
+      .post('/deals/bulk-import')
+      .field('create_contacts', 'true')
+      .attach(
+        'file',
+        Buffer.from(
+          [
+            'title,contact name,email,phone',
+            'Renewal,Ada,ADA@example.com,',
+            'By phone,,,5550199',
+            'New biz,Bob Smith,bob@x.io,5550100',
+            'Upsell,Bob Smith,BOB@x.io,',
+            'No name,,cy@x.io,',
+            'Bad,,not-an-email,'
+          ].join('\n')
+        ),
+        { filename: 'import.csv', contentType: 'text/csv' }
+      );
+
+    expect(response.body.data).toMatchObject({
+      imported: 5,
+      failed: 1,
+      contacts_created: 2,
+      errors: ['Row 6: email is invalid']
+    });
+
+    const [contacts] = (Contact.insertMany as jest.Mock).mock.calls[0];
+    expect(contacts).toHaveLength(2);
+    expect(contacts[0]).toMatchObject({ first_name: 'Bob', last_name: 'Smith', email: 'bob@x.io', phone: '5550100' });
+    expect(contacts[1]).toMatchObject({ first_name: 'cy', email: 'cy@x.io' });
+
+    const [deals] = (Deal.insertMany as jest.Mock).mock.calls[0];
+    expect(deals[0].contact_id).toBe(CONTACT_ID);
+    expect(deals[1].contact_id).toBe(CONTACT_ID);
+    expect(deals[2].contact_id).toBe(contacts[0]._id);
+    expect(deals[3].contact_id).toBe(contacts[0]._id);
+    expect(deals[4].contact_id).toBe(contacts[1]._id);
+  });
+
   it('rejects an unknown status', async () => {
     const response = await upload('/deals/bulk-import', 'title,status\nX,pending\n');
     expect(response.body.data.errors).toEqual(['Row 1: status must be one of open, won, lost']);

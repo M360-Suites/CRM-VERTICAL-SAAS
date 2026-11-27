@@ -7,13 +7,13 @@ import { Activity } from '../models/Activity';
 import { Pipeline, PipelineStage } from '../models/Pipeline';
 import { AuthRequest, PaginatedResponse } from '../types';
 import { canViewDeal, dealScope, requireOrganization } from '../utils/tenant';
-import { MAX_IMPORT_ROWS, nameKey, parseImportCsv } from '../utils/csvImport';
+import { MAX_IMPORT_ROWS, isValidEmail, isValidPhone, nameKey, parseImportCsv } from '../utils/csvImport';
 import { parseLeadValue } from '../utils/leadValue';
 import { emitDealStageChanged } from '../services/socketService';
 import { queueDealTriggers } from '../services/triggerService';
 import { assignDealOwner } from '../services/dealAssignmentService';
 import { handleError } from '../utils/errorHandler';
-import { dealKey, findDuplicateDeal, isTruthyFlag, loadExistingDealKeys } from '../utils/duplicates';
+import { dealKey, emailKey, findDuplicateDeal, isTruthyFlag, loadExistingDealKeys, phoneKey } from '../utils/duplicates';
 import type { DuplicateDeal } from '../utils/duplicates';
 
 /** 409 body pointing the client at the open deal that already exists */
@@ -952,6 +952,37 @@ const DEAL_CSV_FIELDS: Record<string, string> = {
   contact_id: 'contact_id'
 };
 
+/**
+ * Extra columns recognised only when the import is asked to create contacts.
+ * Kept out of DEAL_CSV_FIELDS so imports without the flag keep these columns in custom_fields.
+ */
+const DEAL_CSV_CONTACT_FIELDS: Record<string, string> = {
+  ...DEAL_CSV_FIELDS,
+  contact_name: 'contact_name',
+  full_name: 'contact_name',
+  first_name: 'contact_first_name',
+  firstname: 'contact_first_name',
+  last_name: 'contact_last_name',
+  lastname: 'contact_last_name',
+  surname: 'contact_last_name',
+  email_address: 'contact_email',
+  phone: 'contact_phone',
+  phone_number: 'contact_phone',
+  mobile: 'contact_phone',
+  contact_phone: 'contact_phone'
+};
+
+/** Contact name from the row, falling back to the email's local part or the phone */
+const importContactName = (fields: Record<string, string>): { first_name: string; last_name: string } => {
+  if (fields.contact_first_name) {
+    return { first_name: fields.contact_first_name, last_name: fields.contact_last_name || '' };
+  }
+  const [first = '', ...rest] = (fields.contact_name || '').split(/\s+/).filter(Boolean);
+  if (first) return { first_name: first, last_name: fields.contact_last_name || rest.join(' ') };
+  const fallback = fields.contact_email?.split('@')[0] || fields.contact_phone || 'Unknown';
+  return { first_name: fallback, last_name: fields.contact_last_name || '' };
+};
+
 const DEAL_STATUSES: DealStatus[] = ['open', 'won', 'lost'];
 
 type ImportStage = {
@@ -963,7 +994,7 @@ type ImportStage = {
   is_lost: boolean;
 };
 
-type ImportContact = { _id: mongoose.Types.ObjectId; email?: string; company_id?: mongoose.Types.ObjectId };
+type ImportContact = { _id: mongoose.Types.ObjectId; email?: string; phone?: string; company_id?: mongoose.Types.ObjectId };
 
 /**
  * Bulk import deals (pipeline leads) from CSV
@@ -986,7 +1017,15 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const { rows, custom_columns } = parseImportCsv(req.file.buffer.toString('utf8'), DEAL_CSV_FIELDS);
+    // Opt-in: create a contact for rows whose email/phone matches no existing contact
+    const createContacts = isTruthyFlag(
+      (req.body as { create_contacts?: unknown } | undefined)?.create_contacts ?? req.query.create_contacts
+    );
+
+    const { rows, custom_columns } = parseImportCsv(
+      req.file.buffer.toString('utf8'),
+      createContacts ? DEAL_CSV_CONTACT_FIELDS : DEAL_CSV_FIELDS
+    );
 
     if (rows.length === 0) {
       res.status(400).json({
@@ -1012,9 +1051,12 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
     const companyNames = distinct('company');
     const contactIds = validIds('contact_id');
     const contactEmails = distinct('contact_email');
+    const contactPhones = createContacts
+      ? [...new Set(rows.map(({ fields }) => phoneKey(fields.contact_phone)).filter((v): v is string => !!v))]
+      : [];
 
     // Resolve every reference up front instead of querying per row
-    const [pipelines, stages, companiesById, companiesByName, contactsById, contactsByEmail] = await Promise.all([
+    const [pipelines, stages, companiesById, companiesByName, contactsById, contactsByEmail, contactsByPhone] = await Promise.all([
       Pipeline.find({ organization_id: organizationId }).select('_id name is_default').sort({ created_at: 1 }).lean(),
       PipelineStage.find({ organization_id: organizationId })
         .select('_id name pipeline_id order is_won is_lost')
@@ -1037,6 +1079,11 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
             .collation(caseInsensitive)
             .select('_id email company_id')
             .lean<ImportContact[]>()
+        : Promise.resolve([] as ImportContact[]),
+      contactPhones.length
+        ? Contact.find({ phone: { $in: contactPhones }, organization_id: organizationId })
+            .select('_id phone company_id')
+            .lean<ImportContact[]>()
         : Promise.resolve([] as ImportContact[])
     ]);
 
@@ -1051,6 +1098,11 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
     const companyIdByName = new Map(companiesByName.map((company) => [nameKey(company.name), company._id]));
     const contactById = new Map(contactsById.map((contact) => [contact._id.toString(), contact]));
     const contactByEmail = new Map(contactsByEmail.map((contact) => [nameKey(contact.email ?? ''), contact]));
+    const contactByPhone = new Map(contactsByPhone.map((contact) => [phoneKey(contact.phone) ?? '', contact]));
+    // Contacts this import will create, keyed by email/phone so repeated rows share one contact
+    const newContacts = new Map<string, Record<string, unknown> & { _id: mongoose.Types.ObjectId }>();
+    const newContactByEmail = new Map<string, mongoose.Types.ObjectId>();
+    const newContactByPhone = new Map<string, mongoose.Types.ObjectId>();
 
     const ownerId = req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined;
     const now = new Date();
@@ -1147,6 +1199,39 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
           errors.push(`${row}: contact_id is invalid`);
           return;
         }
+      } else if (createContacts && (fields.contact_email || fields.contact_phone)) {
+        const email = emailKey(fields.contact_email);
+        const phone = phoneKey(fields.contact_phone);
+        if (email && !isValidEmail(email)) {
+          errors.push(`${row}: email is invalid`);
+          return;
+        }
+        if (phone && !isValidPhone(phone)) {
+          errors.push(`${row}: phone is invalid`);
+          return;
+        }
+        contact = (email && contactByEmail.get(email)) || (phone && contactByPhone.get(phone)) || undefined;
+        if (!contact) {
+          const pendingId = (email && newContactByEmail.get(email)) || (phone && newContactByPhone.get(phone)) || undefined;
+          if (pendingId) {
+            contact = { _id: pendingId, company_id: newContacts.get(pendingId.toString())?.company_id as mongoose.Types.ObjectId | undefined };
+          } else {
+            const _id = new mongoose.Types.ObjectId();
+            newContacts.set(_id.toString(), {
+              _id,
+              ...importContactName(fields),
+              email,
+              phone,
+              company_id: companyId,
+              owner_id: ownerId,
+              organization_id: organizationId,
+              custom_fields: {}
+            });
+            if (email) newContactByEmail.set(email, _id);
+            if (phone) newContactByPhone.set(phone, _id);
+            contact = { _id, company_id: companyId };
+          }
+        }
       } else if (fields.contact_email) {
         contact = contactByEmail.get(nameKey(fields.contact_email));
         if (!contact) extra.contact_email = fields.contact_email;
@@ -1189,6 +1274,11 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
       });
     });
 
+    // Only create contacts that a successfully validated deal actually uses
+    const usedContactIds = new Set(validDeals.map((deal) => deal.contact_id?.toString()));
+    const contactsToCreate = [...newContacts.values()].filter((contact) => usedContactIds.has(contact._id.toString()));
+    if (contactsToCreate.length > 0) await Contact.insertMany(contactsToCreate);
+
     let imported = 0;
     if (validDeals.length > 0) {
       const created = await Deal.insertMany(validDeals);
@@ -1214,6 +1304,7 @@ export const bulkImportDeals = async (req: AuthRequest, res: Response): Promise<
         imported,
         failed: errors.length,
         skipped: duplicates.length,
+        ...(createContacts ? { contacts_created: contactsToCreate.length } : {}),
         custom_columns,
         errors: errors.length > 0 ? errors : undefined,
         duplicates: duplicates.length > 0 ? duplicates : undefined

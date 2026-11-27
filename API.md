@@ -1037,12 +1037,13 @@ Emails built in the template canvas, used by triggers and broadcasts. `html` is 
 
 | Method | Endpoint | Description | Access |
 |--------|----------|-------------|--------|
-| GET | /email-templates?search&page&limit | List (no html/design), newest first | read |
-| POST | /email-templates | `{ name, subject, html, preview_text?, design? }` | manage |
+| GET | /email-templates?search&category&page&limit | List newest first. Items include `category` and `design` (for card previews) but not `html`. `category` is comma-separated (`welcome,newsletter`), matches any; unknown value → `400` | read |
+| GET | /email-templates/categories | Sidebar counts: `{ categories: [{ value, label, count }], uncategorized }` | read |
+| POST | /email-templates | `{ name, subject, html, preview_text?, category?, design? }` — `category` ∈ `sales`, `welcome`, `promo`, `newsletter`, `new_sales_alert`, `price_discount` (else `400`); PATCH `category: null` clears it | manage |
 | GET | /email-templates/variables | Merge tags for the variable picker: `[{ key, label, sample, tag }]` | read |
 | POST | /email-templates/preview | `{ subject, html }` → rendered with sample data (for unsaved canvas content) | read |
 | GET / PATCH / DELETE | /email-templates/:id | Get with html + design / update / delete (`409` while a trigger uses it) | read / manage |
-| POST | /email-templates/:id/duplicate | Copy as "… (copy)" | manage |
+| POST | /email-templates/:id/duplicate | Copy as "… (copy)", category included | manage |
 | POST | /email-templates/:id/test | Send to yourself with sample data | manage |
 
 **Merge tags:** `{{contact.first_name}}`, `{{contact.last_name}}`, `{{contact.full_name}}`, `{{contact.email}}`, `{{contact.phone}}`, `{{contact.role_title}}`, `{{company.name}}`, `{{deal.title}}`, `{{deal.value}}`, `{{deal.currency}}`, `{{stage.name}}`, `{{owner.name}}`, `{{owner.email}}`, `{{organization.name}}`, `{{unsubscribe_url}}`. Add a fallback with a pipe: `{{contact.first_name | there}}`. Values are HTML-escaped. If a template has no `{{unsubscribe_url}}`, an unsubscribe footer is added automatically when emailing contacts.
